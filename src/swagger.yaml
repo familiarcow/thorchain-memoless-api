@@ -1,0 +1,804 @@
+openapi: 3.0.3
+info:
+  title: THORChain Memoless Registration API
+  version: 1.0.0
+  description: |
+    A headless API service for THORChain memoless transaction registration. 
+    This API manages a hot RUNE wallet to register memos on behalf of users, 
+    eliminating the need for users to hold RUNE or manage THORChain transactions directly.
+    
+    ## Features
+    - **Immediate Response**: Returns registration ID instantly
+    - **Background Processing**: Handles transaction confirmation asynchronously  
+    - **Comprehensive Validation**: Amount, reference ID, and dust threshold validation
+    - **QR Code Generation**: Chain-specific QR codes for deposits
+    - **Multi-chain Support**: Bitcoin, Ethereum, BSC, and all THORChain supported assets
+    
+    
+  contact:
+    name: Tyler Bond
+    email: tyler@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Development server
+  - url: https://api.thorchain-memoless.com
+    description: Production server
+
+tags:
+  - name: Health
+    description: API health and status endpoints
+  - name: Assets
+    description: Available assets for memoless registration
+  - name: Registration
+    description: Memo registration and management
+  - name: Validation
+    description: Amount and transaction validation
+  - name: QR Codes
+    description: QR code generation for deposits
+  - name: Tracking
+    description: Transaction tracking and monitoring
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: API Health Check
+      description: |
+        Returns the current health status of the API including:
+        - Wallet readiness and balance
+        - THORChain network connectivity
+        - Database status
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: API is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /:
+    get:
+      tags: [Health]
+      summary: API Information
+      description: Returns basic API information and available endpoints
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "THORChain Memoless Registration API"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  network:
+                    type: string
+                    enum: [mainnet, stagenet]
+                    example: "stagenet"
+                  endpoints:
+                    type: object
+                    properties:
+                      health:
+                        type: string
+                        example: "/health"
+                      assets:
+                        type: string
+                        example: "/api/v1/assets"
+                      register:
+                        type: string
+                        example: "/api/v1/register"
+
+  /api/v1/assets:
+    get:
+      tags: [Assets]
+      summary: Get Valid Assets
+      description: |
+        Returns all assets available for memoless registration. 
+        Implements memoless.md Steps 1-2:
+        - Queries THORChain pools endpoint
+        - Filters for Available status
+        - Excludes THOR chain assets and tokens
+        - Sorted by descending balance_rune
+      responses:
+        '200':
+          description: List of available assets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  assets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+        '500':
+          description: Failed to fetch assets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/assets/{asset}:
+    get:
+      tags: [Assets]
+      summary: Get Asset Details
+      description: Get detailed information about a specific asset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          description: Asset identifier (e.g., BTC.BTC, ETH.ETH)
+          schema:
+            type: string
+            example: "BTC.BTC"
+      responses:
+        '200':
+          description: Asset details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '404':
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/register:
+    post:
+      tags: [Registration]
+      summary: Register Memo
+      description: |
+        Register a memo for memoless transactions and immediately return complete memo details.
+        
+        **⚠️ IMPORTANT VALIDATION REQUIREMENTS:**
+        
+        1. **Asset Validation**: The `asset` parameter must be from the list returned by `GET /api/v1/assets`
+        2. **Memo Format**: Any non-empty string - THORChain will validate the memo format during registration
+        
+        **Process Flow (Synchronous):**
+        - Validates asset against available THORChain pools
+        - Creates MsgDeposit with REFERENCE:{asset}:{memo} format
+        - Broadcasts transaction to THORChain
+        - Immediately checks `/thorchain/memo/{txid}` for memo details
+        - Returns complete memo reference data including reference ID
+        
+        **💡 Workflow:**
+        1. First call `GET /api/v1/assets` to get available assets
+        2. Select an asset from the returned list
+        3. Prepare your THORChain memo
+        4. Call this endpoint - it will complete the entire registration process synchronously
+        5. Response includes reference ID ready for amount validation and deposits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrationRequest'
+      responses:
+        '201':
+          description: Registration submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidAssetFormat:
+                  summary: Invalid Asset Format
+                  value:
+                    success: false
+                    error:
+                      code: "INVALID_ASSET_FORMAT"
+                      message: "Asset must be in format CHAIN.SYMBOL (e.g., BTC.BTC, ETH.ETH)"
+                unsupportedAsset:
+                  summary: Unsupported Asset
+                  value:
+                    success: false
+                    error:
+                      code: "UNSUPPORTED_ASSET"
+                      message: "Asset 'INVALID.ASSET' is not available for memoless registration"
+                      details:
+                        providedAsset: "INVALID.ASSET"
+                        supportedAssets: ["BTC.BTC", "ETH.ETH", "GAIA.ATOM", "AVAX.AVAX", "BSC.BNB"]
+                        totalSupportedAssets: 23
+                        suggestion: "Use GET /api/v1/assets to see all available assets"
+                emptyMemo:
+                  summary: Empty Memo
+                  value:
+                    success: false
+                    error:
+                      code: "EMPTY_MEMO"
+                      message: "Memo cannot be empty"
+        '409':
+          description: Memo already registered for this asset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Registration failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/register/{registrationId}:
+    get:
+      tags: [Registration]
+      summary: Get Registration Status
+      description: |
+        Get the current status of a registration including all data needed for Steps 7-9:
+        - Reference ID and validation data
+        - Inbound address and deposit info
+        - Usage statistics and expiry information
+      parameters:
+        - name: registrationId
+          in: path
+          required: true
+          description: Registration ID returned from POST /register
+          schema:
+            type: string
+            example: "reg_abc123"
+      responses:
+        '200':
+          description: Registration status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  registration:
+                    $ref: '#/components/schemas/RegistrationStatus'
+        '404':
+          description: Registration not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/preflight:
+    post:
+      tags: [Validation]
+      summary: Preflight Check
+      description: |
+        Performs validation checks before registration to ensure the request will succeed.
+        
+        **Validation Steps:**
+        - Validates asset is supported
+        - Checks reference ID format and availability  
+        - Validates amount format and dust threshold
+        - Verifies memo format compatibility
+        
+        **Use this endpoint to:**
+        - Pre-validate parameters before calling /register
+        - Check if a reference ID is still available
+        - Validate amount formatting and thresholds
+        - Ensure memo will be accepted by THORChain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+              properties:
+                internal_api_id:
+                  type: string
+                  description: Optional registration ID to validate against
+                  example: "reg_abc123"
+                asset:
+                  type: string
+                  description: Asset identifier (CHAIN.SYMBOL format)
+                  default: "ETH.ETH"
+                  example: "BTC.BTC"
+                reference:
+                  type: string
+                  description: Reference ID to validate (if checking existing registration)
+                  example: "00123"
+                amount:
+                  type: string
+                  description: Amount to validate
+                  default: "0.001"
+                  example: "0.00100123"
+                inputType:
+                  type: string
+                  enum: [asset]
+                  default: asset
+                  description: Amount input type (only asset supported)
+      responses:
+        '200':
+          description: Preflight check passed - proceed with transaction
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Preflight check passed - proceed with transaction"
+                  data:
+                    type: object
+                    properties:
+                      current_uses:
+                        type: integer
+                        description: Current number of times this memo has been used
+                        example: 0
+                      max_uses:
+                        type: integer
+                        description: Maximum number of times this memo can be used
+                        example: 3
+                      memo:
+                        type: string
+                        description: The actual registered memo from THORChain
+                        example: "DONATE:BTC.BTC"
+                      inbound_address:
+                        type: string
+                        description: Chain-specific inbound address for deposits
+                        example: "bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535"
+                      qr_code:
+                        type: string
+                        description: QR code string in chain-specific format
+                        example: "bitcoin:bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535?amount=0.00100033"
+                      qr_code_data_url:
+                        type: string
+                        description: Base64 encoded PNG image data URL
+                        example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+                      time_remaining:
+                        type: string
+                        description: Time until registration expires
+                        example: "24h"
+                      blocks_remaining:
+                        type: integer
+                        description: Number of blocks until registration expires
+                        example: 14400
+                      seconds_remaining:
+                        type: integer
+                        description: Approximate seconds until registration expires (blocks * 6)
+                        example: 86400
+        '400':
+          description: Preflight check failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: string
+                        example: "PREFLIGHT_FAILED"
+                      message:
+                        type: string
+                        example: "Reference ID is not registered yet - available for registration"
+                  data:
+                    type: object
+                    properties:
+                      current_uses:
+                        type: integer
+                        example: 0
+                      max_uses:
+                        type: integer
+                        example: 3
+                      time_remaining:
+                        type: string
+                        example: "No expiry"
+                      blocks_remaining:
+                        type: integer
+                        example: 0
+                      seconds_remaining:
+                        type: integer
+                        example: 0
+
+
+
+  /api/v1/track-transaction:
+    post:
+      tags: [Tracking]
+      summary: Track Transaction
+      description: |
+        Validates a transaction hash and provides tracking URL.
+        Implements memoless.md Step 9 transaction tracking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - txHash
+              properties:
+                txHash:
+                  type: string
+                  description: Transaction hash (0x prefix will be stripped)
+                  example: "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890"
+                network:
+                  type: string
+                  enum: [mainnet, stagenet]
+                  default: stagenet
+                  description: Network to track transaction on
+      responses:
+        '200':
+          description: Transaction tracking information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  tracking:
+                    $ref: '#/components/schemas/TransactionTracking'
+        '400':
+          description: Invalid transaction hash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    Asset:
+      type: object
+      properties:
+        asset:
+          type: string
+          description: Asset identifier
+          example: "BTC.BTC"
+        decimals:
+          type: integer
+          description: Number of decimal places
+          example: 8
+        priceUSD:
+          type: number
+          format: float
+          description: Current USD price
+          example: 45000.50
+        balanceRune:
+          type: string
+          description: RUNE balance in the pool
+          example: "32134415450828"
+        status:
+          type: string
+          description: Pool status
+          example: "Available"
+        isToken:
+          type: boolean
+          description: Whether this is a token (has contract address)
+          example: false
+
+    RegistrationRequest:
+      type: object
+      required:
+        - asset
+        - memo
+      properties:
+        asset:
+          type: string
+          description: |
+            Asset to register memo for. **Must be from the list returned by GET /api/v1/assets**.
+            Format: CHAIN.SYMBOL (e.g., BTC.BTC, ETH.ETH, GAIA.ATOM)
+          pattern: '^[A-Z]+\.[A-Z0-9]+$'
+          default: "ETH.ETH"
+          example: "BTC.BTC"
+        memo:
+          type: string
+          description: |
+            THORChain transaction memo. Any non-empty string is accepted - THORChain will validate the format after registration.
+            
+            Common formats include:
+            - `=:` for swaps (e.g., `=:ETH.ETH:0x742d35Cc6634C0532925a3b8D121C2c6C9b8DC8E:0/1/0`)
+            - `+:` for adding liquidity (e.g., `+:BTC.BTC::bc1quser123:100`)
+            - `-:` for withdrawing liquidity
+            - `SWAP:`, `ADD:`, `WITHDRAW:` (alternative formats)
+          minLength: 1
+          default: "=:BTC.BTC:bc1quser123456789abcdef:0/1/0"
+          example: "=:ETH.ETH:0x742d35Cc6634C0532925a3b8D121C2c6C9b8DC8E:0/1/0"
+
+    RegistrationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        internal_api_id:
+          type: string
+          description: Internal API tracking ID for this registration (unique identifier used by this API)
+          example: "reg_abc123"
+        asset:
+          type: string
+          description: Registered asset
+          example: "BTC.BTC"
+        memo:
+          type: string
+          description: Registered memo
+          example: "=:ETH.ETH:0x1c7b17362c84287bd1184447e6dfeaf920c31bbe:1000:0:100"
+        reference:
+          type: string
+          description: Reference ID for amount validation
+          example: "20002"
+        reference_length:
+          type: integer
+          description: Number of characters in the reference ID
+          example: 5
+        height:
+          type: string
+          description: Block height when memo was registered
+          example: "12345678"
+        registration_hash:
+          type: string
+          description: THORChain registration hash
+          example: "AF524818D42B63D25BBA0CCC4909F127CAA645C0F9CD07324F2824CC151A64C8"
+        registered_by:
+          type: string
+          description: THORChain address that registered the memo
+          example: "thor1zupk5lmc84r2dh738a9g3zscavannjy3nzplwt"
+        txHash:
+          type: string
+          description: THORChain transaction hash
+          example: "A1B2C3D4E5F67890ABCDEF1234567890ABCDEF12"
+        decimals:
+          type: integer
+          description: Number of decimal places for this asset
+          example: 8
+        minimum_amount_to_send:
+          type: string
+          description: Minimum amount that can be sent with this reference ID (calculated based on memoless encoding rules)
+          example: "0.00100010"
+
+    RegistrationStatus:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          example: "reg_abc123"
+        status:
+          type: string
+          enum: [pending, confirmed, failed]
+          example: "confirmed"
+        txHash:
+          type: string
+          example: "A1B2C3D4E5F67890ABCDEF1234567890ABCDEF12"
+        asset:
+          type: string
+          example: "BTC.BTC"
+        memo:
+          type: string
+          example: "=:ETH.ETH:0x742d35Cc..."
+        createdAt:
+          type: string
+          format: date-time
+        referenceId:
+          type: string
+          description: Reference ID for amount validation (only when confirmed)
+          example: "00123"
+        depositInfo:
+          $ref: '#/components/schemas/DepositInfo'
+
+    DepositInfo:
+      type: object
+      properties:
+        inboundAddress:
+          type: string
+          description: Chain-specific inbound address for deposits
+          example: "bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535"
+        dustThreshold:
+          type: number
+          format: float
+          description: Minimum deposit amount
+          example: 0.00001
+        chain:
+          type: string
+          description: Blockchain identifier
+          example: "BTC"
+        expiresAt:
+          type: string
+          description: Block number when registration expires
+          example: "6712308"
+        maxUse:
+          type: integer
+          description: Maximum number of uses
+          example: 3
+        usageCount:
+          type: integer
+          description: Current usage count
+          example: 0
+        available:
+          type: boolean
+          description: Whether registration is still available for use
+          example: true
+
+
+    ValidationResult:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+          description: Whether the amount passes all validations
+          example: true
+        processedAmount:
+          type: string
+          description: Final formatted amount with reference ID
+          example: "0.00100123"
+        rawAmount:
+          type: string
+          description: Amount in base units for THORChain
+          example: "100123"
+        validationDetails:
+          type: object
+          properties:
+            referenceId:
+              type: string
+              example: "00123"
+            referenceMatches:
+              type: boolean
+              description: Whether last digits match reference ID
+              example: true
+            aboveDustThreshold:
+              type: boolean
+              description: Whether amount is above dust threshold
+              example: true
+            thorchainValidation:
+              type: object
+              description: Response from THORChain memo validation endpoint
+            timeRemaining:
+              type: string
+              description: Time until registration expires
+              example: "24h"
+            currentBlock:
+              type: integer
+              example: 6709417
+            blocksRemaining:
+              type: integer
+              example: 2891
+        errors:
+          type: array
+          items:
+            type: string
+          description: List of validation errors if any
+
+
+    QRCodeData:
+      type: object
+      properties:
+        qrString:
+          type: string
+          description: QR code string in chain-specific format
+          example: "bitcoin:bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535?amount=0.00100123"
+        qrCodeDataURL:
+          type: string
+          description: Base64 encoded PNG image data URL
+          example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+        chain:
+          type: string
+          example: "BTC"
+        address:
+          type: string
+          example: "bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535"
+        amount:
+          type: string
+          example: "0.00100123"
+
+
+    TransactionTracking:
+      type: object
+      properties:
+        isValid:
+          type: boolean
+          example: true
+        cleanTxHash:
+          type: string
+          description: Transaction hash with 0x prefix removed
+          example: "1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890"
+        trackingUrl:
+          type: string
+          format: uri
+          description: URL to track the transaction
+          example: "https://stagenet.thorchain.net/tx/1a2b3c4d5e6f..."
+        network:
+          type: string
+          enum: [mainnet, stagenet]
+          example: "stagenet"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+        wallet:
+          type: object
+          properties:
+            address:
+              type: string
+              description: Hot wallet THORChain address
+              example: "thor1abc123def456..."
+            ready:
+              type: boolean
+              description: Whether wallet is initialized and ready
+              example: true
+            network:
+              type: string
+              enum: [mainnet, stagenet]
+              example: "stagenet"
+        thorchain:
+          type: object
+          properties:
+            connected:
+              type: boolean
+              description: Whether THORChain API is accessible
+              example: true
+            status:
+              type: string
+              description: THORChain network status
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Error code for programmatic handling
+              example: "INVALID_ASSET"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Asset BTC.INVALID is not supported"
+            details:
+              type: string
+              description: Additional error details (development only)
+            timestamp:
+              type: string
+              format: date-time
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (optional)
+
+# Optional security requirement (uncomment if you implement API keys)
+# security:
+#   - ApiKeyAuth: []
