@@ -11,6 +11,7 @@ import { TransactionService } from './services/transaction.service';
 import { MemolessService } from './services/memoless.service';
 import { DatabaseService } from './services/database.service';
 import { RegistrationService } from './services/registration.service';
+import { NotificationService } from './services/notification.service';
 
 // Controllers
 import { AssetsController } from './controllers/assets.controller';
@@ -31,6 +32,7 @@ export class MemolessApiApplication {
   private memolessService: MemolessService;
   private databaseService: DatabaseService;
   private registrationService: RegistrationService;
+  private notificationService: NotificationService;
 
   // Controllers
   private assetsController: AssetsController;
@@ -57,10 +59,12 @@ export class MemolessApiApplication {
       config
     );
     this.databaseService = new DatabaseService();
+    this.notificationService = new NotificationService();
     this.registrationService = new RegistrationService(
       this.memolessService,
       this.walletService,
       this.databaseService,
+      this.notificationService,
       config
     );
 

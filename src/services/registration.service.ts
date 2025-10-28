@@ -4,6 +4,7 @@ import { WalletService } from './wallet.service';
 import { TransactionService } from './transaction.service';
 import { DatabaseService, RegistrationRecord } from './database.service';
 import { MemoParserService } from './memo-parser.service';
+import { NotificationService, NotificationPayload, FailureNotificationPayload } from './notification.service';
 import { NetworkConfig, QRCodeData } from '../types';
 
 export interface RegistrationRequest {
@@ -72,6 +73,7 @@ export class RegistrationService {
   private memolessService: MemolessService;
   private walletService: WalletService;
   private databaseService: DatabaseService;
+  private notificationService: NotificationService;
   private memoParserService: MemoParserService;
   private config: NetworkConfig;
 
@@ -79,11 +81,13 @@ export class RegistrationService {
     memolessService: MemolessService,
     walletService: WalletService,
     databaseService: DatabaseService,
+    notificationService: NotificationService,
     config: NetworkConfig
   ) {
     this.memolessService = memolessService;
     this.walletService = walletService;
     this.databaseService = databaseService;
+    this.notificationService = notificationService;
     this.memoParserService = new MemoParserService();
     this.config = config;
   }
@@ -142,8 +146,48 @@ export class RegistrationService {
 
     // 6. Register memo using memoless service
     console.log(`🚀 [RegistrationService] Step 6: Registering memo on THORChain...`);
-    const txHash = await this.memolessService.registerMemo(request.asset, processedMemo);
-    console.log(`📊 [RegistrationService] Transaction hash: ${txHash}`);
+    let txHash: string;
+    try {
+      txHash = await this.memolessService.registerMemo(request.asset, processedMemo);
+      console.log(`📊 [RegistrationService] Transaction hash: ${txHash}`);
+    } catch (error) {
+      console.error(`❌ [RegistrationService] Failed to register memo on THORChain:`, error);
+      
+      // Send failure notification if enabled
+      if (this.notificationService.isAnyNotificationEnabled()) {
+        try {
+          console.log(`🔔 [RegistrationService] Sending failure notification...`);
+          
+          // Get current RUNE balance
+          let runeBalance: string | undefined;
+          try {
+            const balance = await this.walletService.getBalance();
+            runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+          } catch (balanceError) {
+            console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(balanceError as Error).message}`);
+          }
+
+          const failurePayload: FailureNotificationPayload = {
+            txHash: 'Transaction failed to submit',
+            asset: request.asset,
+            memo: request.memo,
+            error: 'Failed to submit transaction to THORChain',
+            errorDetails: (error as Error).message,
+            network: this.config.network,
+            hotWalletAddress: this.walletService.getAddress(),
+            hotWalletRuneBalance: runeBalance,
+            timestamp: new Date().toISOString()
+          };
+
+          await this.notificationService.sendFailureNotification(failurePayload);
+          console.log(`✅ [RegistrationService] Failure notification sent`);
+        } catch (notificationError) {
+          console.error(`❌ [RegistrationService] Failed to send failure notification: ${(notificationError as Error).message}`);
+        }
+      }
+      
+      throw error; // Re-throw the original error
+    }
 
     // 7. Immediately check memo reference
     console.log(`🔍 [RegistrationService] Step 7: Checking memo reference...`);
@@ -153,6 +197,40 @@ export class RegistrationService {
       console.log(`📋 [RegistrationService] Memo reference retrieved:`, memoReference);
     } catch (error) {
       console.error(`❌ [RegistrationService] Failed to get memo reference:`, error);
+      
+      // Send failure notification if enabled
+      if (this.notificationService.isAnyNotificationEnabled()) {
+        try {
+          console.log(`🔔 [RegistrationService] Sending failure notification...`);
+          
+          // Get current RUNE balance
+          let runeBalance: string | undefined;
+          try {
+            const balance = await this.walletService.getBalance();
+            runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+          } catch (balanceError) {
+            console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(balanceError as Error).message}`);
+          }
+
+          const failurePayload: FailureNotificationPayload = {
+            txHash,
+            asset: request.asset,
+            memo: request.memo,
+            error: 'Failed to retrieve memo reference after transaction',
+            errorDetails: (error as Error).message,
+            network: this.config.network,
+            hotWalletAddress: this.walletService.getAddress(),
+            hotWalletRuneBalance: runeBalance,
+            timestamp: new Date().toISOString()
+          };
+
+          await this.notificationService.sendFailureNotification(failurePayload);
+          console.log(`✅ [RegistrationService] Failure notification sent`);
+        } catch (notificationError) {
+          console.error(`❌ [RegistrationService] Failed to send failure notification: ${(notificationError as Error).message}`);
+        }
+      }
+      
       throw new Error(`Registration successful but failed to retrieve memo details: ${(error as Error).message}`);
     }
 
@@ -176,6 +254,40 @@ export class RegistrationService {
       registeredBy: memoReference.registered_by
     });
     console.log(`🆔 [RegistrationService] Registration ID: ${registrationId}`);
+    
+    // 10. Send notification if enabled
+    if (this.notificationService.isAnyNotificationEnabled()) {
+      try {
+        console.log(`🔔 [RegistrationService] Step 10: Sending notifications...`);
+        
+        // Get current RUNE balance
+        let runeBalance: string | undefined;
+        try {
+          const balance = await this.walletService.getBalance();
+          runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+        } catch (error) {
+          console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(error as Error).message}`);
+        }
+
+        const notificationPayload: NotificationPayload = {
+          registrationId,
+          txHash,
+          asset: request.asset,
+          memo: request.memo,
+          referenceId: memoReference.reference,
+          network: this.config.network,
+          hotWalletAddress: this.walletService.getAddress(),
+          hotWalletRuneBalance: runeBalance,
+          timestamp: new Date().toISOString()
+        };
+
+        await this.notificationService.sendRegistrationNotification(notificationPayload);
+        console.log(`✅ [RegistrationService] Notifications sent`);
+      } catch (error) {
+        console.error(`❌ [RegistrationService] Failed to send notifications: ${(error as Error).message}`);
+        // Don't fail the registration if notification fails
+      }
+    }
 
     // Return complete memo reference data with decimals and minimum amount
     return {
