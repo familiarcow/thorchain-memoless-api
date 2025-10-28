@@ -10,6 +10,7 @@ import { NetworkConfig, QRCodeData } from '../types';
 export interface RegistrationRequest {
   asset: string;
   memo: string;
+  requested_in_asset_amount?: string;
 }
 
 export interface RegistrationResponse {
@@ -25,6 +26,7 @@ export interface RegistrationResponse {
   txHash: string;
   decimals: number;
   minimum_amount_to_send: string;
+  suggested_in_asset_amount?: string;
 }
 
 export interface ValidationResult {
@@ -289,6 +291,24 @@ export class RegistrationService {
       }
     }
 
+    // 11. Calculate suggested amount if requested
+    let suggestedAmount: string | undefined;
+    if (request.requested_in_asset_amount) {
+      console.log(`🧮 [RegistrationService] Step 11: Calculating suggested amount...`);
+      try {
+        suggestedAmount = this.calculateSuggestedAmount(
+          request.requested_in_asset_amount,
+          minimumAmountToSend,
+          memoReference.reference,
+          assetDecimals
+        );
+        console.log(`✅ [RegistrationService] Suggested amount calculated: ${suggestedAmount}`);
+      } catch (error) {
+        console.error(`❌ [RegistrationService] Failed to calculate suggested amount:`, error);
+        // Don't fail the registration if suggestion calculation fails
+      }
+    }
+
     // Return complete memo reference data with decimals and minimum amount
     return {
       success: true,
@@ -302,7 +322,8 @@ export class RegistrationService {
       registered_by: memoReference.registered_by,
       txHash,
       decimals: assetDecimals,
-      minimum_amount_to_send: minimumAmountToSend
+      minimum_amount_to_send: minimumAmountToSend,
+      ...(suggestedAmount && { suggested_in_asset_amount: suggestedAmount })
     };
   }
 
@@ -778,6 +799,89 @@ export class RegistrationService {
     console.log(`💰 [RegistrationService] Minimum amount: ${result}`);
     
     return result;
+  }
+
+  // Calculate suggested amount based on requested amount and reference embedding
+  private calculateSuggestedAmount(
+    requestedAmount: string,
+    minimumAmount: string,
+    referenceId: string,
+    decimals: number
+  ): string {
+    console.log(`🧮 [RegistrationService] Calculating suggested amount...`);
+    console.log(`💰 [RegistrationService] Requested: ${requestedAmount}`);
+    console.log(`🔢 [RegistrationService] Reference: "${referenceId}" (length: ${referenceId.length})`);
+    console.log(`📊 [RegistrationService] Decimals: ${decimals}`);
+    
+    // Step 1: Check minimum threshold
+    const requestedFloat = parseFloat(requestedAmount);
+    const minimumFloat = parseFloat(minimumAmount);
+    
+    if (requestedFloat < minimumFloat) {
+      console.log(`⬆️  [RegistrationService] Requested (${requestedAmount}) below minimum (${minimumAmount})`);
+      console.log(`💰 [RegistrationService] Suggested amount: ${minimumAmount}`);
+      return minimumAmount;
+    }
+    
+    // Step 2: Normalize requested amount to asset decimals (truncate, don't round)
+    const [integerPart, decimalPart = ''] = requestedAmount.split('.');
+    const truncatedDecimal = decimalPart.substring(0, decimals).padEnd(decimals, '0');
+    const normalizedRequested = `${integerPart}.${truncatedDecimal}`;
+    
+    console.log(`📐 [RegistrationService] Normalized requested: ${normalizedRequested}`);
+    
+    // Step 3: Handle reference embedding
+    const referenceLength = referenceId.length;
+    
+    if (referenceLength > decimals) {
+      // Edge case: Truncate reference to fit decimals
+      const truncatedReference = referenceId.substring(0, decimals);
+      const result = `${integerPart}.${truncatedReference}`;
+      console.log(`⚠️  [RegistrationService] Reference too long, truncated: ${result}`);
+      return result;
+    }
+    
+    // Step 4: Embed reference in last positions
+    const baseDecimal = truncatedDecimal.substring(0, decimals - referenceLength);
+    let candidate = `${integerPart}.${baseDecimal}${referenceId}`;
+    
+    console.log(`🔧 [RegistrationService] Initial candidate: ${candidate}`);
+    
+    // Step 5: Ensure suggested > requested by incrementing if needed
+    while (parseFloat(candidate) <= parseFloat(normalizedRequested)) {
+      console.log(`⬆️  [RegistrationService] Incrementing: ${candidate} <= ${normalizedRequested}`);
+      candidate = this.incrementBeforeReference(candidate, referenceId, decimals);
+      console.log(`🔢 [RegistrationService] New candidate: ${candidate}`);
+    }
+    
+    console.log(`✅ [RegistrationService] Final suggested amount: ${candidate}`);
+    return candidate;
+  }
+
+  // Helper method to increment the digit before the reference ID
+  private incrementBeforeReference(amount: string, referenceId: string, decimals: number): string {
+    const [integerPart, decimalPart] = amount.split('.');
+    const referenceLength = referenceId.length;
+    
+    // Get the part before the reference
+    const beforeReference = decimalPart.substring(0, decimals - referenceLength);
+    
+    // Convert to number, increment, and handle carry-over
+    let beforeNum = parseInt(beforeReference || '0');
+    beforeNum += 1;
+    
+    // Handle carry-over to integer part
+    const maxBeforeValue = Math.pow(10, decimals - referenceLength) - 1;
+    if (beforeNum > maxBeforeValue) {
+      // Carry over to integer part
+      const newInteger = (parseInt(integerPart) + 1).toString();
+      const newBefore = '0'.repeat(decimals - referenceLength);
+      return `${newInteger}.${newBefore}${referenceId}`;
+    }
+    
+    // Pad with zeros to maintain length
+    const paddedBefore = beforeNum.toString().padStart(decimals - referenceLength, '0');
+    return `${integerPart}.${paddedBefore}${referenceId}`;
   }
 
   /**

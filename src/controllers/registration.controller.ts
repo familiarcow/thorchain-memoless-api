@@ -4,6 +4,7 @@ import { RegistrationService } from '../services/registration.service';
 export interface RegistrationRequest {
   asset: string;
   memo: string;
+  requested_in_asset_amount?: string;
 }
 
 export class RegistrationController {
@@ -16,7 +17,7 @@ export class RegistrationController {
   // POST /api/v1/register
   async registerMemo(req: Request, res: Response): Promise<void> {
     try {
-      const { asset, memo } = req.body;
+      const { asset, memo, requested_in_asset_amount } = req.body;
 
       // Basic validation
       if (!asset || !memo) {
@@ -78,7 +79,8 @@ export class RegistrationController {
 
       const registrationRequest: RegistrationRequest = {
         asset,
-        memo
+        memo,
+        ...(requested_in_asset_amount && { requested_in_asset_amount })
       };
 
       const result = await this.registrationService.registerMemo(registrationRequest);

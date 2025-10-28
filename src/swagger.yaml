@@ -526,6 +526,15 @@ components:
           minLength: 1
           default: "=:BTC.BTC:bc1quser123456789abcdef:0/1/0"
           example: "=:ETH.ETH:0x742d35Cc6634C0532925a3b8D121C2c6C9b8DC8E:0/1/0"
+        requested_in_asset_amount:
+          type: string
+          description: |
+            Optional. Amount requested by user for calculating a suggested amount that embeds the reference ID.
+            When provided, the response will include a `suggested_in_asset_amount` that:
+            - Embeds the reference ID in the decimal places according to the asset's decimal precision
+            - Ensures the suggested amount is always higher than the requested amount
+            - Handles minimum amount validation and decimal normalization
+          example: "1.5"
 
     RegistrationResponse:
       type: object
@@ -577,6 +586,18 @@ components:
           type: string
           description: Minimum amount that can be sent with this reference ID (calculated based on memoless encoding rules)
           example: "0.00100010"
+        suggested_in_asset_amount:
+          type: string
+          description: |
+            Optional. Calculated suggested amount that embeds the reference ID and is guaranteed to be higher than the requested amount.
+            Only present when `requested_in_asset_amount` was provided in the request.
+            
+            The calculation logic:
+            - If requested amount is below minimum_amount_to_send, returns the minimum
+            - Otherwise, normalizes the amount to asset decimals (truncating, not rounding)
+            - Embeds the reference ID in the last decimal places
+            - Increments if needed to ensure suggested > requested
+          example: "1.50020002"
 
     RegistrationStatus:
       type: object
