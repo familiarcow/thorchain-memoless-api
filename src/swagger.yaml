@@ -11,7 +11,7 @@ info:
     - **Immediate Response**: Returns registration ID instantly
     - **Background Processing**: Handles transaction confirmation asynchronously  
     - **Comprehensive Validation**: Amount, reference ID, and dust threshold validation
-    - **QR Code Generation**: Chain-specific QR codes for deposits
+    - **Suggested Amount Calculation**: Smart amount calculation with reference ID embedding
     - **Multi-chain Support**: Bitcoin, Ethereum, BSC, and all THORChain supported assets
     
     
@@ -37,10 +37,6 @@ tags:
     description: Memo registration and management
   - name: Validation
     description: Amount and transaction validation
-  - name: QR Codes
-    description: QR code generation for deposits
-  - name: Tracking
-    description: Transaction tracking and monitoring
 
 paths:
   /health:
@@ -423,50 +419,6 @@ paths:
 
 
 
-  /api/v1/track-transaction:
-    post:
-      tags: [Tracking]
-      summary: Track Transaction
-      description: |
-        Validates a transaction hash and provides tracking URL.
-        Implements memoless.md Step 9 transaction tracking.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - txHash
-              properties:
-                txHash:
-                  type: string
-                  description: Transaction hash (0x prefix will be stripped)
-                  example: "0x1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890"
-                network:
-                  type: string
-                  enum: [mainnet, stagenet]
-                  default: stagenet
-                  description: Network to track transaction on
-      responses:
-        '200':
-          description: Transaction tracking information
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                    example: true
-                  tracking:
-                    $ref: '#/components/schemas/TransactionTracking'
-        '400':
-          description: Invalid transaction hash
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
@@ -711,47 +663,6 @@ components:
           description: List of validation errors if any
 
 
-    QRCodeData:
-      type: object
-      properties:
-        qrString:
-          type: string
-          description: QR code string in chain-specific format
-          example: "bitcoin:bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535?amount=0.00100123"
-        qrCodeDataURL:
-          type: string
-          description: Base64 encoded PNG image data URL
-          example: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
-        chain:
-          type: string
-          example: "BTC"
-        address:
-          type: string
-          example: "bc1qalgy3f70we7p3ymp36c2njepccr90nrj5wr535"
-        amount:
-          type: string
-          example: "0.00100123"
-
-
-    TransactionTracking:
-      type: object
-      properties:
-        isValid:
-          type: boolean
-          example: true
-        cleanTxHash:
-          type: string
-          description: Transaction hash with 0x prefix removed
-          example: "1a2b3c4d5e6f7890abcdef1234567890abcdef1234567890abcdef1234567890"
-        trackingUrl:
-          type: string
-          format: uri
-          description: URL to track the transaction
-          example: "https://stagenet.thorchain.net/tx/1a2b3c4d5e6f..."
-        network:
-          type: string
-          enum: [mainnet, stagenet]
-          example: "stagenet"
 
     HealthResponse:
       type: object
