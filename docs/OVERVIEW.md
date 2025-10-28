@@ -17,12 +17,14 @@ Welcome to the complete documentation for the THORChain Memoless API. This docum
    - Request/response schemas
    - Error handling and status codes
    - Rate limiting information
+   - Webhook notification triggers
    - Affiliate injection behavior
 
 3. **[CONFIGURATION.md](./CONFIGURATION.md)**
    - Environment variable reference
    - Network configuration options
-   - Database setup instructions
+   - Database setup instructions (optional)
+   - Webhook notification setup
    - Security considerations
    - Production vs development settings
 
@@ -89,7 +91,9 @@ This documentation aims to:
 ### Advanced Features
 - [x] Automatic affiliate fee injection
 - [x] Multiple affiliate support and chaining
-- [x] Database persistence (SQLite/PostgreSQL)
+- [x] Database persistence (SQLite/PostgreSQL, optional)
+- [x] Real-time Discord/Slack webhook notifications
+- [x] Success and failure event monitoring
 - [x] Rate limiting and security
 - [x] Error handling and recovery
 - [x] Production deployment options

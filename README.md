@@ -15,8 +15,10 @@ Welcome to the complete documentation for the THORChain Memoless API. This docum
 2. **[API_REFERENCE.md](./API_REFERENCE.md)**
    - Complete endpoint documentation
    - Request/response schemas
+   - Suggested amount calculation feature
    - Error handling and status codes
    - Rate limiting information
+   - Webhook notification triggers
    - Affiliate injection behavior
 
 3. **[CONFIGURATION.md](./CONFIGURATION.md)**
@@ -82,14 +84,19 @@ This documentation aims to:
 - [x] Asset management and listing
 - [x] Memo registration with immediate response
 - [x] Reference ID generation and validation
+- [x] **Suggested amount calculation with reference ID embedding**
 - [x] Preflight transaction validation
 - [x] Transaction tracking and monitoring
 - [x] Health checks and status reporting
 
 ### Advanced Features
+- [x] **Smart amount calculation with decimal normalization**
+- [x] **Dynamic reference ID embedding for any asset**
 - [x] Automatic affiliate fee injection
 - [x] Multiple affiliate support and chaining
-- [x] Database persistence (SQLite/PostgreSQL)
+- [x] Database persistence (SQLite/PostgreSQL, optional)
+- [x] Real-time Discord/Slack webhook notifications
+- [x] Success and failure event monitoring
 - [x] Rate limiting and security
 - [x] Error handling and recovery
 - [x] Production deployment options
@@ -145,6 +152,54 @@ When updating the codebase:
 - [Docker Documentation](https://docs.docker.com/)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
 - [PM2 Documentation](https://pm2.keymetrics.io/docs/)
+
+## 🔔 Webhook Notifications
+
+The API supports real-time webhook notifications for both successful and failed registrations via Discord and Slack.
+
+### Features
+- **🟢 Success Notifications**: Sent when registrations complete successfully
+- **🔴 Failure Notifications**: Sent when registrations fail (invalid memos, transaction failures)
+- **💰 Live Wallet Balance**: Includes current RUNE balance of hot wallet
+- **📊 Comprehensive Details**: Transaction hash, asset, memo, network, error details
+- **⚡ Non-blocking**: Notification failures don't affect registration functionality
+
+### Configuration
+
+Add these environment variables to your `.env` file:
+
+```bash
+# Enable/disable webhook notifications
+ENABLE_DISCORD_WEBHOOK=true
+ENABLE_SLACK_WEBHOOK=false
+
+# Discord webhook URL
+DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK
+
+# Slack webhook URL (optional)
+SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+```
+
+### Notification Content
+
+#### Success Notifications (Green/🔄)
+- Asset and network information
+- Reference ID and transaction hash
+- Hot wallet address and RUNE balance
+- Memo details and timestamp
+- Registration ID for tracking
+
+#### Failure Notifications (Red/❌)
+- Failed asset and intended memo
+- Error message and technical details
+- Hot wallet address and RUNE balance
+- Transaction hash (if available)
+- Failure timestamp and network
+
+### Supported Platforms
+- **Discord**: Rich embeds with color coding and structured fields
+- **Slack**: Formatted blocks with comprehensive information
+- **Extensible**: Easy to add support for additional platforms
 
 ## 💡 Tips for Success
 
