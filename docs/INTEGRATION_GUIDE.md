@@ -108,3 +108,5 @@ If the preflight passes `"success" = true`, then you are greenlit to send EXACTL
 You can ask your user for their transaction ID and check their transaction's status via THORNode. Remember to strip the `0x` off any EVM deposits when tracking. 
 
 Always run a preflight before having users send in funds, since this will double check all of the details so their swap isn't accidentally lost. Any sends on the incorrect network, incorrect amount, or incorrect asset are likely irreversibly lost.
+
+If the preflight fails, DO NOT PROCEED WITH THE SWAP. It probably means your `amount` is wrong. Double check your `amount` logic, or use our built in tools to construct the amount for you.
