@@ -1,226 +1,130 @@
-# Documentation Overview
+# THORChain Memoless API
 
-Welcome to the complete documentation for the THORChain Memoless API. This documentation accurately reflects the current codebase and its capabilities.
+A simple API that lets anyone use THORChain without needing RUNE tokens for fees. Just send your transaction with a reference ID embedded in the amount, and this API handles the rest. Any interface can run this in the backend to have their own dedicated "Memoless" service for THORChain, meaning you can swap without connecting a wallet! Just reigster and send a specific amount to the network using this API as a tool.
 
-## 📁 Documentation Structure
+## What it does
 
-### Core Documentation
+This API should be run by interfaces looking to provide their users with Memoless Swaps.
 
-1. **[README.md](./README.md)** 
-   - Project overview and quick start guide
-   - Key features and benefits
-   - Basic installation and configuration
-   - Architecture overview
+1. Call our API to register the user's intended transaction memo (like a swap)
+2. Get back a reference ID (e.g. "42075")  
+3. Send their transaction with the reference ID in the decimal places (e.g. send `1.50042075` BTC instead of `1.5` BTC)
+4. THORChain automatically executes their original intent
 
-2. **[API_REFERENCE.md](./API_REFERENCE.md)**
-   - Complete endpoint documentation
-   - Request/response schemas
-   - Suggested amount calculation feature
-   - Error handling and status codes
-   - Rate limiting information
-   - Webhook notification triggers
-   - Affiliate injection behavior
+This API manages a hot RUNE wallet and manages the registration of the memo, along with preflight checks before sending.
 
-3. **[CONFIGURATION.md](./CONFIGURATION.md)**
-   - Environment variable reference
-   - Network configuration options
-   - Database setup instructions
-   - Security considerations
-   - Production vs development settings
+## Key Features
 
-### Specialized Guides
+- Built in database for tracking purposes. Can be disabled.
+- Swap memo detection & affiliate injection to detect when the memo is a swap and cleanly adds your affiliate & fee into the swap details
+- Discord / Slack webhooks for notifications every time a memo is registered, or fails
+- Helper API to adjust a desired amount to a Memoless amount
+- Preflight API to double check you're sending the right about before sending
+- Automated deposit QR code generation
 
-4. **[AFFILIATE_INJECTION.md](./AFFILIATE_INJECTION.md)**
-   - Complete affiliate fee system documentation
-   - Configuration and setup
-   - Revenue tracking and calculations
-   - Multiple affiliate support
-   - Troubleshooting affiliate issues
+## Quick Start
 
-5. **[DEPLOYMENT.md](./DEPLOYMENT.md)**
-   - Production deployment strategies
-   - Docker and container deployment
-   - Cloud deployment (AWS, GCP, Azure)
-   - Kubernetes configurations
-   - Monitoring and alerting setup
-
-6. **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
-   - Common issues and solutions
-   - Error diagnosis and resolution
-   - Performance optimization
-   - Debug procedures
-   - Getting help resources
-
-## 🎯 Documentation Goals
-
-This documentation aims to:
-
-- ✅ **Accurate**: Reflects the current codebase exactly
-- ✅ **Complete**: Covers all features and functionality
-- ✅ **Practical**: Provides working examples and real-world scenarios
-- ✅ **Maintainable**: Easy to update as the codebase evolves
-- ✅ **User-Friendly**: Clear structure and helpful explanations
-
-## 🗂️ Quick Navigation
-
-### Getting Started
-- New to the project? Start with **[README.md](./README.md)**
-- Need to configure? See **[CONFIGURATION.md](./CONFIGURATION.md)**
-- Ready to deploy? Follow **[DEPLOYMENT.md](./DEPLOYMENT.md)**
-
-### Development
-- Building integrations? Use **[API_REFERENCE.md](./API_REFERENCE.md)**
-- Issues? Check **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
-- Want affiliate fees? Read **[AFFILIATE_INJECTION.md](./AFFILIATE_INJECTION.md)**
-
-### Operations
-- Production deployment: **[DEPLOYMENT.md](./DEPLOYMENT.md)**
-- System monitoring: **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
-- Security setup: **[CONFIGURATION.md](./CONFIGURATION.md)**
-
-## 📋 What's Covered
-
-### Core API Features
-- [x] Asset management and listing
-- [x] Memo registration with immediate response
-- [x] Reference ID generation and validation
-- [x] **Suggested amount calculation with reference ID embedding**
-- [x] Preflight transaction validation
-- [x] Transaction tracking and monitoring
-- [x] Health checks and status reporting
-
-### Advanced Features
-- [x] **Smart amount calculation with decimal normalization**
-- [x] **Dynamic reference ID embedding for any asset**
-- [x] Automatic affiliate fee injection
-- [x] Multiple affiliate support and chaining
-- [x] Database persistence (SQLite/PostgreSQL, optional)
-- [x] Real-time Discord/Slack webhook notifications
-- [x] Success and failure event monitoring
-- [x] Rate limiting and security
-- [x] Error handling and recovery
-- [x] Production deployment options
-
-### Infrastructure
-- [x] Docker containerization
-- [x] Kubernetes deployment
-- [x] Database configuration and optimization
-- [x] SSL/TLS setup
-- [x] Monitoring and alerting
-- [x] Backup and recovery strategies
-
-
-### Maintenance Notes
-When updating the codebase:
-1. Update corresponding documentation sections
-2. Test all examples and code snippets
-3. Verify configuration options are current
-4. Update API schemas if endpoints change
-
-## 🚀 Using This Documentation
-
-### For Developers
-1. Start with **[README.md](./README.md)** for project overview
-2. Reference **[API_REFERENCE.md](./API_REFERENCE.md)** for integration details
-3. Use **[CONFIGURATION.md](./CONFIGURATION.md)** for environment setup
-4. Consult **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** when issues arise
-
-### For DevOps/Operations
-1. Review **[CONFIGURATION.md](./CONFIGURATION.md)** for environment planning
-2. Follow **[DEPLOYMENT.md](./DEPLOYMENT.md)** for production setup
-3. Implement monitoring from **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)**
-4. Set up affiliate fees using **[AFFILIATE_INJECTION.md](./AFFILIATE_INJECTION.md)**
-
-### For Product Teams
-1. Understand capabilities from **[README.md](./README.md)**
-2. Plan affiliate revenue using **[AFFILIATE_INJECTION.md](./AFFILIATE_INJECTION.md)**
-3. Reference **[API_REFERENCE.md](./API_REFERENCE.md)** for feature specifications
-
-## 🔗 External References
-
-### THORChain Documentation
-- [THORChain Docs](https://docs.thorchain.org/)
-- [Memo Format Specification](https://docs.thorchain.org/concepts/memos)
-- [THORNames](https://docs.thorchain.org/concepts/thornames)
-
-### Development Tools
-- [Node.js Documentation](https://nodejs.org/docs/)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-- [Express.js Guide](https://expressjs.com/en/guide/routing.html)
-
-### Deployment Platforms
-- [Docker Documentation](https://docs.docker.com/)
-- [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [PM2 Documentation](https://pm2.keymetrics.io/docs/)
-
-## 🔔 Webhook Notifications
-
-The API supports real-time webhook notifications for both successful and failed registrations via Discord and Slack.
-
-### Features
-- **🟢 Success Notifications**: Sent when registrations complete successfully
-- **🔴 Failure Notifications**: Sent when registrations fail (invalid memos, transaction failures)
-- **💰 Live Wallet Balance**: Includes current RUNE balance of hot wallet
-- **📊 Comprehensive Details**: Transaction hash, asset, memo, network, error details
-- **⚡ Non-blocking**: Notification failures don't affect registration functionality
-
-### Configuration
-
-Add these environment variables to your `.env` file:
+### 1. Setup
 
 ```bash
-# Enable/disable webhook notifications
-ENABLE_DISCORD_WEBHOOK=true
-ENABLE_SLACK_WEBHOOK=false
+# Clone and install
+git clone <your-repo>
+cd thorchain-memoless-api
+npm install
 
-# Discord webhook URL
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK
-
-# Slack webhook URL (optional)
-SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+# Create environment file
+cp .env.example .env
 ```
 
-### Notification Content
+### 2. Configure `.env`
 
-#### Success Notifications (Green/🔄)
-- Asset and network information
-- Reference ID and transaction hash
-- Hot wallet address and RUNE balance
-- Memo details and timestamp
-- Registration ID for tracking
+```bash
+# Required: Your hot wallet mnemonic (use test wallet!)
+HOT_WALLET_MNEMONIC="your twelve word mnemonic here"
 
-#### Failure Notifications (Red/❌)
-- Failed asset and intended memo
-- Error message and technical details
-- Hot wallet address and RUNE balance
-- Transaction hash (if available)
-- Failure timestamp and network
+# Network (stagenet for testing, mainnet for production)
+THORCHAIN_NETWORK=stagenet
 
-### Supported Platforms
-- **Discord**: Rich embeds with color coding and structured fields
-- **Slack**: Formatted blocks with comprehensive information
-- **Extensible**: Easy to add support for additional platforms
+# Optional: Database (leave empty to run without persistence)
+DATABASE_URL="sqlite:./dev-database.db"
 
-## 💡 Tips for Success
+# Optional: Webhooks for notifications
+ENABLE_DISCORD_WEBHOOK=true
+DISCORD_WEBHOOK=https://discord.com/api/webhooks/your/webhook/url
+```
 
-### Development Best Practices
-- Always test with stagenet before mainnet deployment
-- Monitor hot wallet balance regularly
-- Implement proper error handling and logging
-- Use environment variables for all configuration
+### 3. Run
 
-### Production Considerations
-- Use PostgreSQL instead of SQLite for production
-- Enable SSL/TLS for all communications
-- Set up monitoring and alerting
-- Plan for database backups and disaster recovery
+```bash
+# Development
+npm run dev
 
-### Security Recommendations
-- Use dedicated hot wallet with minimal funds
-- Store sensitive credentials securely
-- Implement rate limiting and CORS protection
-- Regular security updates and monitoring
+# Production
+npm run build
+npm start
 
----
+# View API docs at http://localhost:8080
+```
 
-**This documentation is maintained alongside the codebase to ensure accuracy and completeness.**
+## Key Endpoints
+
+- `GET /health` - Check API status and wallet balance
+- `GET /api/v1/assets` - List supported assets  
+- `POST /api/v1/register` - Register a transaction, get reference ID
+- `POST /api/v1/suggest-amounts` - Calculate amount with embedded reference ID
+
+## Example Usage
+
+```bash
+# 1. Register a swap from BTC to RUNE
+curl -X POST http://localhost:8080/api/v1/register \
+  -H "Content-Type: application/json" \
+  -d '{"asset": "BTC.BTC", "memo": "=:THOR.RUNE"}'
+
+# Response: {"registrationId": "abc123", "referenceId": "42075", ...}
+
+# 2. Get the exact amount to send
+curl -X POST http://localhost:8080/api/v1/suggest-amounts \
+  -H "Content-Type: application/json" \
+  -d '{"asset": "BTC.BTC", "referenceId": "42075", "desiredAmounts": ["0.001"]}'
+
+# Response: {"suggestedAmounts": ["0.00142075"]}
+
+# 3. Send 0.00142075 BTC to the THORChain BTC address
+# THORChain will execute your swap automatically
+```
+
+## Architecture
+
+The API acts as a proxy between users and THORChain:
+
+1. **Registration**: We submit your memo to THORChain and get a reference ID
+2. **Amount encoding**: Reference ID gets embedded in your transaction amount  
+3. **User transaction**: You send to THORChain with the encoded amount
+4. **Execution**: THORChain extracts the reference encoded in the amount and executes your memo
+
+## Documentation
+
+- [Configuration Guide](./docs/CONFIGURATION.md) - Environment variables and setup
+- [API Reference](./docs/API_REFERENCE.md) - Complete endpoint documentation
+- [Integration Guide](./docs/INTEGRATION_GUIDE.md) - Step-by-step integration for frontends
+- [Overview](./docs/OVERVIEW.md) - Complete documentation structure
+
+## Requirements
+
+- Node.js 18+
+- A THORChain wallet with RUNE for fees
+- Optional: PostgreSQL for production
+
+## Security Notes
+
+- Use a dedicated hot wallet with minimal RUNE (~10-100 RUNE). Each registration costs 0.02 RUNE, so 100 RUNE is good for 5,000 registrations
+- Use discord or slack webhooks to stay alerted to your wallet balance
+- Never commit your `.env` file
+- Test on stagenet before mainnet
+- Monitor wallet balance via webhooks
+
+## Notes
+- Registration takes 5-7 seconds, since it is reliant on THORChain block times
+- There's no gating to registering swaps. This service can be API gated, or another alternative to prevent spam
+- Use the affiliate injection to set up a small fee for swaps. You can use this to continuously top up the hot wallet to create a sustainable stream of RUNE funding the registration costs.
