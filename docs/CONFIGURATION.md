@@ -81,7 +81,7 @@ ENABLE_SLACK_WEBHOOK=true
 
 # Slack webhook URL
 # Create an incoming webhook in your Slack workspace
-SLACK_WEBHOOK={addyourslackwebhookURL}
+SLACK_WEBHOOK=
 ```
 
 ### Notification Features
