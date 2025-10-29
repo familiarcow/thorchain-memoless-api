@@ -39,18 +39,72 @@ cp .env.example .env
 ### 2. Configure `.env`
 
 ```bash
-# Required: Your hot wallet mnemonic (use test wallet!)
+# ===========================================
+# REQUIRED ENVIRONMENT VARIABLES
+# ===========================================
+
+# Hot Wallet Configuration (REQUIRED)
 HOT_WALLET_MNEMONIC="your twelve word mnemonic here"
 
-# Network (stagenet for testing, mainnet for production)
-THORCHAIN_NETWORK=stagenet
-
-# Optional: Database (leave empty to run without persistence)
+# Database Configuration (OPTIONAL - will run without persistent storage if not provided)
+# For development, you can use PostgreSQL or SQLite
+# PostgreSQL example:
+# DATABASE_URL="postgresql://username:password@localhost:5432/thorchain_memoless"
+# SQLite example (easier for development):
 DATABASE_URL="sqlite:./dev-database.db"
 
-# Optional: Webhooks for notifications
-ENABLE_DISCORD_WEBHOOK=true
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/your/webhook/url
+# ===========================================
+# NETWORK CONFIGURATION
+# ===========================================
+
+# THORChain Network (mainnet or stagenet)
+THORCHAIN_NETWORK=stagenet
+
+# API Server Configuration
+NODE_ENV=development
+PORT=8080
+
+# ===========================================
+# OPTIONAL CONFIGURATION
+# ===========================================
+
+# CORS Configuration
+CORS_ORIGINS=http://localhost:8080,http://localhost:3000,http://localhost:3001
+
+# Rate Limiting
+RATE_LIMIT=100
+
+# Logging
+LOG_LEVEL=info
+
+# ===========================================
+# NOTIFICATION WEBHOOKS
+# ===========================================
+
+# Enable/disable webhook notifications
+ENABLE_DISCORD_WEBHOOK=false
+ENABLE_SLACK_WEBHOOK=false
+
+# Discord webhook URL for notifications
+# DISCORD_WEBHOOK=https://discord.com/api/webhooks/YOUR/WEBHOOK/URL
+
+# Slack webhook URL for notifications (optional)
+# SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+
+# ===========================================
+# AFFILIATE CONFIGURATION
+# ===========================================
+
+# Enable/disable automatic affiliate injection in swap and liquidity memos
+INJECT_AFFILIATE_IN_SWAPS=true
+
+# THORName or address for affiliate fees
+# Examples: "wd", "dx", "t", "thor1234...", etc. Leave empty to disable affiliate fees
+AFFILIATE_THORNAME=
+
+# Affiliate fee in basis points (1 basis point = 0.01%, max 10000 = 100%)
+# Example: 5 = 0.05%, 50 = 0.5%, 500 = 5%
+AFFILIATE_FEE_BP=5
 ```
 
 ### 3. Run
