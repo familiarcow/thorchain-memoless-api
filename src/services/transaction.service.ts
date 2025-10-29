@@ -46,12 +46,6 @@ export class TransactionService {
     return trimmed || '0';
   }
 
-  static convertFromBaseUnits(baseUnits: string, asset: string): string {
-    const decimals = TransactionService.getAssetDecimals(asset);
-    const raw = parseFloat(baseUnits);
-    const normalized = raw / Math.pow(10, decimals);
-    return normalized.toString();
-  }
 
   static getAssetDecimals(asset: string): number {
     // Default decimals based on asset

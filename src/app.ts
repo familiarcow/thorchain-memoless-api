@@ -165,6 +165,7 @@ export class MemolessApiApplication {
     apiRouter.post('/register', this.registrationController.registerMemo.bind(this.registrationController));
     apiRouter.get('/register/:registrationId', this.registrationController.getRegistrationStatus.bind(this.registrationController));
     apiRouter.post('/preflight', this.registrationController.preflightCheck.bind(this.registrationController));
+    apiRouter.post('/suggest-amounts', this.registrationController.suggestAmounts.bind(this.registrationController));
     apiRouter.post('/track-transaction', this.registrationController.trackTransaction.bind(this.registrationController));
 
     this.app.use('/api/v1', apiRouter);

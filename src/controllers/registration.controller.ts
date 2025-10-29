@@ -296,7 +296,84 @@ export class RegistrationController {
     }
   }
 
+  // POST /api/v1/suggest-amounts
+  async suggestAmounts(req: Request, res: Response): Promise<void> {
+    try {
+      const { asset, reference, requested_amount } = req.body;
 
+      // Basic validation
+      if (!asset || !reference || !requested_amount) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'MISSING_PARAMETERS',
+            message: 'asset, reference, and requested_amount are required'
+          }
+        });
+        return;
+      }
+
+      // Validate asset format
+      if (!asset.includes('.') || asset.split('.').length !== 2) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_ASSET_FORMAT',
+            message: 'Asset must be in format CHAIN.SYMBOL (e.g., BTC.BTC, ETH.ETH)'
+          }
+        });
+        return;
+      }
+
+      // Validate reference format (should be numeric string)
+      if (!/^\d+$/.test(reference)) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_REFERENCE_FORMAT',
+            message: 'Reference must be a numeric string (e.g., "00042")'
+          }
+        });
+        return;
+      }
+
+      // Validate requested amount format (should be valid number)
+      const requestedFloat = parseFloat(requested_amount);
+      if (isNaN(requestedFloat) || requestedFloat <= 0) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'INVALID_AMOUNT_FORMAT',
+            message: 'requested_amount must be a valid positive number'
+          }
+        });
+        return;
+      }
+
+      // Calculate suggestions
+      const result = await this.registrationService.calculateAmountSuggestions({
+        asset,
+        reference,
+        requested_amount
+      });
+
+      res.json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      console.error('Error calculating amount suggestions:', error);
+      
+      res.status(500).json({
+        success: false,
+        error: {
+          code: 'CALCULATION_FAILED',
+          message: 'Failed to calculate amount suggestions',
+          details: (error as Error).message
+        }
+      });
+    }
+  }
 
   // POST /api/v1/track-transaction  
   async trackTransaction(req: Request, res: Response): Promise<void> {

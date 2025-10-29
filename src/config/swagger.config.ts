@@ -1,4 +1,3 @@
-import swaggerJsdoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Application } from 'express';
 import path from 'path';
@@ -270,29 +269,4 @@ export class SwaggerConfig {
     return this.swaggerSpec;
   }
 
-  /**
-   * Add or update a path in the specification
-   */
-  static addPath(path: string, methods: any): void {
-    if (!this.swaggerSpec || !this.swaggerSpec.paths) {
-      console.error('❌ Swagger spec not initialized');
-      return;
-    }
-
-    this.swaggerSpec.paths[path] = methods;
-    console.log(`📚 Added path to Swagger spec: ${path}`);
-  }
-
-  /**
-   * Add or update a schema in the specification
-   */
-  static addSchema(name: string, schema: any): void {
-    if (!this.swaggerSpec || !this.swaggerSpec.components || !this.swaggerSpec.components.schemas) {
-      console.error('❌ Swagger spec not initialized');
-      return;
-    }
-
-    this.swaggerSpec.components.schemas[name] = schema;
-    console.log(`📚 Added schema to Swagger spec: ${name}`);
-  }
 }

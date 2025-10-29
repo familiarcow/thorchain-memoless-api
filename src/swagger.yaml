@@ -417,8 +417,131 @@ paths:
                         type: integer
                         example: 0
 
-
-
+  /api/v1/suggest-amounts:
+    post:
+      tags: [Validation]
+      summary: Get Amount Suggestions
+      description: |
+        Calculates suggested amounts for memoless transactions with both rounding up and rounding down options.
+        
+        **Use Cases:**
+        - User wants to send exactly their available balance (round down)
+        - User can send slightly more for optimal validation (round up)
+        - Comparing both options before making a transaction
+        
+        **Algorithm:**
+        1. Normalizes input amount to asset decimal precision
+        2. Embeds reference ID in decimal places
+        3. Provides two suggestions:
+           - **Round Up**: Ensures suggested > requested (current behavior)
+           - **Round Down**: Ensures suggested ≤ requested (new behavior)
+        
+        **Important:** Both suggestions will be valid for memoless protocol, but the round down option may be lower than the user's requested amount.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - asset
+                - reference
+                - requested_amount
+              properties:
+                asset:
+                  type: string
+                  description: Asset identifier (CHAIN.SYMBOL format) - decimals will be automatically fetched from THORChain pools
+                  example: "BTC.BTC"
+                reference:
+                  type: string
+                  description: Reference ID from registration
+                  example: "00042"
+                requested_amount:
+                  type: string
+                  description: Amount user wants to send
+                  example: "1.5"
+      responses:
+        '200':
+          description: Amount suggestions calculated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      asset:
+                        type: string
+                        example: "BTC.BTC"
+                      reference:
+                        type: string
+                        example: "00042"
+                      reference_length:
+                        type: integer
+                        example: 5
+                      decimals:
+                        type: integer
+                        example: 8
+                      requested_amount:
+                        type: string
+                        example: "1.5"
+                      normalized_amount:
+                        type: string
+                        description: Input amount normalized to asset decimals
+                        example: "1.50000000"
+                      suggestions:
+                        type: object
+                        properties:
+                          round_up:
+                            type: object
+                            properties:
+                              amount:
+                                type: string
+                                description: Suggested amount rounded up (always >= requested)
+                                example: "1.50000042"
+                              is_higher_than_requested:
+                                type: boolean
+                                example: true
+                              description:
+                                type: string
+                                example: "Rounded up to ensure amount is higher than requested"
+                          round_down:
+                            type: object
+                            properties:
+                              amount:
+                                type: string
+                                description: Suggested amount rounded down (may be < requested)
+                                example: "1.40000042"
+                              is_lower_than_requested:
+                                type: boolean
+                                example: true
+                              description:
+                                type: string
+                                example: "Rounded down to stay within requested limit"
+                      minimum_amount_to_send:
+                        type: string
+                        description: Minimum valid amount for this reference ID
+                        example: "0.00100042"
+                      both_valid:
+                        type: boolean
+                        description: Whether both suggestions are above minimum amount
+                        example: true
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Calculation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:

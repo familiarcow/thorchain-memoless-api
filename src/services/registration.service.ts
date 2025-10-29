@@ -936,4 +936,148 @@ export class RegistrationService {
       return originalMemo;
     }
   }
+
+  // Calculate both round up and round down amount suggestions
+  async calculateAmountSuggestions(request: {
+    asset: string;
+    reference: string;
+    requested_amount: string;
+  }): Promise<{
+    valid_amount_rounded_up: string;
+    valid_amount_rounded_down: string;
+    rounded_up_difference_usd: string;
+    rounded_down_difference_usd: string;
+  }> {
+    console.log(`🧮 [RegistrationService] Calculating amount suggestions...`);
+    console.log(`🪙 [RegistrationService] Asset: ${request.asset}`);
+    console.log(`🔢 [RegistrationService] Reference: "${request.reference}"`);
+    console.log(`💰 [RegistrationService] Requested: ${request.requested_amount}`);
+
+    // Step 1: Get asset decimals and price from THORChain pools
+    console.log(`📊 [RegistrationService] Fetching asset data from pools...`);
+    let decimals = 8; // Default fallback
+    let assetPriceUSD = 0; // Default fallback
+    try {
+      const assets = await this.memolessService.getValidAssetsForRegistration();
+      const asset = assets.find((a: any) => a.asset === request.asset);
+      if (asset) {
+        decimals = asset.decimals || 8;
+        assetPriceUSD = asset.priceUSD || 0;
+        console.log(`📊 [RegistrationService] Found asset data - Decimals: ${decimals}, Price: $${assetPriceUSD}`);
+      } else {
+        console.log(`⚠️ [RegistrationService] Asset not found in pools, using defaults`);
+      }
+    } catch (error) {
+      console.warn(`⚠️ [RegistrationService] Failed to fetch asset data, using defaults:`, error);
+    }
+
+    const referenceLength = request.reference.length;
+
+    // Step 2: Normalize requested amount to asset decimals (truncate, don't round)
+    const [integerPart, decimalPartRaw = ''] = request.requested_amount.split('.');
+    const truncatedDecimal = decimalPartRaw.substring(0, decimals).padEnd(decimals, '0');
+    const normalizedAmount = `${integerPart}.${truncatedDecimal}`;
+    console.log(`📐 [RegistrationService] Normalized requested: ${normalizedAmount}`);
+
+    // Step 3: Generate both round up and round down suggestions
+    const roundUpSuggestion = this.calculateSingleSuggestion(normalizedAmount, request.reference, decimals, 'up');
+    const roundDownSuggestion = this.calculateSingleSuggestion(normalizedAmount, request.reference, decimals, 'down');
+
+    console.log(`✅ [RegistrationService] Round up suggestion: ${roundUpSuggestion}`);
+    console.log(`✅ [RegistrationService] Round down suggestion: ${roundDownSuggestion}`);
+
+    // Step 4: Calculate USD differences
+    const requestedFloat = parseFloat(request.requested_amount);
+    const roundUpFloat = parseFloat(roundUpSuggestion);
+    const roundDownFloat = parseFloat(roundDownSuggestion);
+
+    const roundUpDifferenceAsset = roundUpFloat - requestedFloat;
+    const roundDownDifferenceAsset = requestedFloat - roundDownFloat;
+
+    const roundUpDifferenceUSD = roundUpDifferenceAsset * assetPriceUSD;
+    const roundDownDifferenceUSD = roundDownDifferenceAsset * assetPriceUSD;
+
+    console.log(`💵 [RegistrationService] USD differences - Up: ${roundUpDifferenceUSD.toFixed(2)}, Down: ${roundDownDifferenceUSD.toFixed(2)}`);
+
+    return {
+      valid_amount_rounded_up: roundUpSuggestion,
+      valid_amount_rounded_down: roundDownSuggestion,
+      rounded_up_difference_usd: roundUpDifferenceUSD.toFixed(2),
+      rounded_down_difference_usd: roundDownDifferenceUSD.toFixed(2)
+    };
+  }
+
+  // Helper method to calculate a single suggestion with rounding direction
+  private calculateSingleSuggestion(normalizedAmount: string, reference: string, decimals: number, direction: 'up' | 'down'): string {
+    const [integerPart, decimalPart] = normalizedAmount.split('.');
+    const referenceLength = reference.length;
+    
+    // Step 1: Embed reference at the end
+    let newDecimalPart = decimalPart.substring(0, decimals - referenceLength) + reference;
+    let workingAmount = `${integerPart}.${newDecimalPart}`;
+    
+    const originalFloat = parseFloat(normalizedAmount);
+    let workingFloat = parseFloat(workingAmount);
+    
+    console.log(`🔧 [RegistrationService] Initial ${direction} candidate: ${workingAmount}`);
+    
+    if (direction === 'up') {
+      // Round up logic: increment until we're higher than requested
+      while (workingFloat <= originalFloat) {
+        console.log(`⬆️ [RegistrationService] Incrementing: ${workingAmount} <= ${normalizedAmount}`);
+        workingAmount = this.incrementBeforeReference(workingAmount, reference, decimals);
+        workingFloat = parseFloat(workingAmount);
+      }
+    } else {
+      // Round down logic: decrement until we're lower than or equal to requested
+      while (workingFloat > originalFloat) {
+        console.log(`⬇️ [RegistrationService] Decrementing: ${workingAmount} > ${normalizedAmount}`);
+        workingAmount = this.decrementBeforeReference(workingAmount, referenceLength);
+        workingFloat = parseFloat(workingAmount);
+      }
+    }
+    
+    console.log(`✅ [RegistrationService] Final ${direction} suggestion: ${workingAmount}`);
+    return workingAmount;
+  }
+
+  // Helper method to decrement the digit before the reference ID
+  private decrementBeforeReference(amount: string, referenceLength: number): string {
+    const [integerPart, decimalPart] = amount.split('.');
+    const digits = decimalPart.split('');
+    const decrementIndex = decimalPart.length - referenceLength - 1;
+    
+    if (decrementIndex >= 0) {
+      let currentDigit = parseInt(digits[decrementIndex]);
+      
+      if (currentDigit > 0) {
+        // Simple decrement
+        digits[decrementIndex] = (currentDigit - 1).toString();
+      } else {
+        // Need to borrow from previous digits
+        let borrowIndex = decrementIndex;
+        while (borrowIndex >= 0 && digits[borrowIndex] === '0') {
+          digits[borrowIndex] = '9';
+          borrowIndex--;
+        }
+        
+        if (borrowIndex >= 0) {
+          digits[borrowIndex] = (parseInt(digits[borrowIndex]) - 1).toString();
+        } else {
+          // Need to borrow from integer part
+          let intValue = parseInt(integerPart);
+          if (intValue > 0) {
+            intValue--;
+            digits[0] = '9';
+            return `${intValue}.${digits.join('')}`;
+          } else {
+            // Cannot decrement further, return minimum possible
+            return `0.${'0'.repeat(decimalPart.length - referenceLength)}${amount.slice(-referenceLength)}`;
+          }
+        }
+      }
+    }
+    
+    return `${integerPart}.${digits.join('')}`;
+  }
 }
