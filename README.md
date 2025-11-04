@@ -91,6 +91,10 @@ ENABLE_SLACK_WEBHOOK=false
 # Slack webhook URL for notifications (optional)
 # SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
 
+# Low Balance Alert Configuration
+# Minimum registrations remaining before sending low balance alert
+LOW_BALANCE_ALERT_THRESHOLD=25
+
 # ===========================================
 # AFFILIATE CONFIGURATION
 # ===========================================
