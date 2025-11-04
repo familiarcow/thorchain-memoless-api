@@ -10,6 +10,7 @@ export interface NotificationPayload {
   network: string;
   hotWalletAddress: string;
   hotWalletRuneBalance?: string;
+  registrationsRemaining?: number;
   timestamp: string;
 }
 
@@ -22,8 +23,21 @@ export interface FailureNotificationPayload {
   network: string;
   hotWalletAddress: string;
   hotWalletRuneBalance?: string;
+  registrationsRemaining?: number;
   timestamp: string;
   userAddress?: string;
+}
+
+export interface LowBalanceAlertPayload {
+  network: string;
+  hotWalletAddress: string;
+  runeBalance: string;
+  registrationsRemaining: number;
+  memolessTxCost: number;
+  networkTxFee: number;
+  totalRegistrationCost: number;
+  threshold: number;
+  timestamp: string;
 }
 
 export interface DiscordMessage {
@@ -70,12 +84,14 @@ export class NotificationService {
   private slackWebhookUrl?: string;
   private discordEnabled: boolean = false;
   private slackEnabled: boolean = false;
+  private lowBalanceThreshold: number;
 
   constructor() {
     this.discordWebhookUrl = process.env.DISCORD_WEBHOOK;
     this.slackWebhookUrl = process.env.SLACK_WEBHOOK;
     this.discordEnabled = process.env.ENABLE_DISCORD_WEBHOOK === 'true';
     this.slackEnabled = process.env.ENABLE_SLACK_WEBHOOK === 'true';
+    this.lowBalanceThreshold = parseInt(process.env.LOW_BALANCE_ALERT_THRESHOLD || '25');
 
     this.logConfiguration();
   }
@@ -134,6 +150,99 @@ export class NotificationService {
     }
   }
 
+  async sendLowBalanceAlert(payload: LowBalanceAlertPayload): Promise<void> {
+    const promises: Promise<void>[] = [];
+
+    if (this.discordEnabled && this.discordWebhookUrl) {
+      promises.push(this.sendDiscordLowBalanceAlert(payload));
+    }
+
+    if (this.slackEnabled && this.slackWebhookUrl) {
+      promises.push(this.sendSlackLowBalanceAlert(payload));
+    }
+
+    if (promises.length > 0) {
+      console.log('🚨 [NotificationService] Sending low balance alerts...');
+      await Promise.allSettled(promises);
+    }
+  }
+
+  shouldSendLowBalanceAlert(registrationsRemaining: number): boolean {
+    return registrationsRemaining > 0 && registrationsRemaining <= this.lowBalanceThreshold;
+  }
+
+  private async sendDiscordLowBalanceAlert(payload: LowBalanceAlertPayload): Promise<void> {
+    try {
+      const embed: DiscordEmbed = {
+        title: '🚨 LOW BALANCE ALERT',
+        description: `Hot wallet balance is running low on ${payload.network}! Only ${payload.registrationsRemaining} registrations remaining.`,
+        color: 0xFF6B35, // Orange color for warnings
+        fields: [
+          {
+            name: '💳 Hot Wallet Address',
+            value: payload.hotWalletAddress,
+            inline: false
+          },
+          {
+            name: '💰 RUNE Balance',
+            value: `${payload.runeBalance} RUNE`,
+            inline: true
+          },
+          {
+            name: '🔢 Registrations Remaining',
+            value: payload.registrationsRemaining.toString(),
+            inline: true
+          },
+          {
+            name: '⚠️ Alert Threshold',
+            value: payload.threshold.toString(),
+            inline: true
+          },
+          {
+            name: '🏷️ Memoless TX Cost',
+            value: `${payload.memolessTxCost} RUNE`,
+            inline: true
+          },
+          {
+            name: '⛽ Network TX Fee',
+            value: `${payload.networkTxFee} RUNE`,
+            inline: true
+          },
+          {
+            name: '📊 Total Cost Per Registration',
+            value: `${payload.totalRegistrationCost} RUNE`,
+            inline: true
+          },
+          {
+            name: '🌐 Network',
+            value: payload.network.toUpperCase(),
+            inline: true
+          }
+        ],
+        timestamp: payload.timestamp,
+        footer: {
+          text: `Please fund the hot wallet to continue registrations`
+        }
+      };
+
+      const message: DiscordMessage = {
+        content: '@here',
+        embeds: [embed]
+      };
+
+      await axios.post(this.discordWebhookUrl!, message, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      console.log('✅ [NotificationService] Discord low balance alert sent successfully');
+    } catch (error) {
+      console.error('❌ [NotificationService] Failed to send Discord low balance alert:', (error as Error).message);
+    }
+  }
+
   private async sendDiscordNotification(payload: NotificationPayload): Promise<void> {
     try {
       const embed: DiscordEmbed = {
@@ -187,6 +296,15 @@ export class NotificationService {
         });
       }
 
+      // Add registrations remaining if available
+      if (payload.registrationsRemaining !== undefined) {
+        embed.fields!.splice(payload.hotWalletRuneBalance ? 4 : 3, 0, {
+          name: '🔢 Registrations Remaining',
+          value: payload.registrationsRemaining.toString(),
+          inline: true
+        });
+      }
+
       // Add user address if available
       if (payload.userAddress) {
         embed.fields!.splice(-2, 0, {
@@ -210,6 +328,95 @@ export class NotificationService {
       console.log('✅ [NotificationService] Discord notification sent successfully');
     } catch (error) {
       console.error('❌ [NotificationService] Failed to send Discord notification:', (error as Error).message);
+    }
+  }
+
+  private async sendSlackLowBalanceAlert(payload: LowBalanceAlertPayload): Promise<void> {
+    try {
+      const blocks: SlackBlock[] = [
+        {
+          type: 'header',
+          text: {
+            type: 'plain_text',
+            text: '🚨 LOW BALANCE ALERT'
+          }
+        },
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `*Hot wallet balance is running low on ${payload.network.toUpperCase()}!*\nOnly *${payload.registrationsRemaining}* registrations remaining.`
+          }
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*💳 Hot Wallet Address:*\n${payload.hotWalletAddress}`
+            }
+          ]
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*💰 RUNE Balance:*\n${payload.runeBalance} RUNE`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*🔢 Registrations Remaining:*\n${payload.registrationsRemaining}`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*⚠️ Alert Threshold:*\n${payload.threshold}`
+            }
+          ]
+        },
+        {
+          type: 'section',
+          fields: [
+            {
+              type: 'mrkdwn',
+              text: `*🏷️ Memoless TX Cost:*\n${payload.memolessTxCost} RUNE`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*⛽ Network TX Fee:*\n${payload.networkTxFee} RUNE`
+            },
+            {
+              type: 'mrkdwn',
+              text: `*📊 Total Cost Per Registration:*\n${payload.totalRegistrationCost} RUNE`
+            }
+          ]
+        },
+        {
+          type: 'context',
+          elements: [
+            {
+              type: 'mrkdwn',
+              text: `⚠️ Please fund the hot wallet to continue registrations | ${payload.timestamp}`
+            }
+          ]
+        } as any
+      ];
+
+      const message: SlackMessage = {
+        text: '@here - Low Balance Alert!',
+        blocks: blocks
+      };
+
+      await axios.post(this.slackWebhookUrl!, message, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 10000
+      });
+
+      console.log('✅ [NotificationService] Slack low balance alert sent successfully');
+    } catch (error) {
+      console.error('❌ [NotificationService] Failed to send Slack low balance alert:', (error as Error).message);
     }
   }
 
@@ -247,6 +454,14 @@ export class NotificationService {
         blocks[1].fields!.push({
           type: 'mrkdwn',
           text: `*💰 RUNE Balance:*\n${payload.hotWalletRuneBalance} RUNE`
+        });
+      }
+
+      // Add registrations remaining if available
+      if (payload.registrationsRemaining !== undefined) {
+        blocks[1].fields!.push({
+          type: 'mrkdwn',
+          text: `*🔢 Registrations Remaining:*\n${payload.registrationsRemaining}`
         });
       }
 
@@ -375,6 +590,15 @@ export class NotificationService {
         });
       }
 
+      // Add registrations remaining if available
+      if (payload.registrationsRemaining !== undefined) {
+        embed.fields!.splice(payload.hotWalletRuneBalance ? 3 : 2, 0, {
+          name: '🔢 Registrations Remaining',
+          value: payload.registrationsRemaining.toString(),
+          inline: true
+        });
+      }
+
       // Add user address if available
       if (payload.userAddress) {
         embed.fields!.splice(-2, 0, {
@@ -440,6 +664,14 @@ export class NotificationService {
         blocks[1].fields!.push({
           type: 'mrkdwn',
           text: `*💰 RUNE Balance:*\n${payload.hotWalletRuneBalance} RUNE`
+        });
+      }
+
+      // Add registrations remaining if available
+      if (payload.registrationsRemaining !== undefined) {
+        blocks[1].fields!.push({
+          type: 'mrkdwn',
+          text: `*🔢 Registrations Remaining:*\n${payload.registrationsRemaining}`
         });
       }
 

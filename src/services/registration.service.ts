@@ -4,7 +4,7 @@ import { WalletService } from './wallet.service';
 import { TransactionService } from './transaction.service';
 import { DatabaseService, RegistrationRecord } from './database.service';
 import { MemoParserService } from './memo-parser.service';
-import { NotificationService, NotificationPayload, FailureNotificationPayload } from './notification.service';
+import { NotificationService, NotificationPayload, FailureNotificationPayload, LowBalanceAlertPayload } from './notification.service';
 import { NetworkConfig, QRCodeData } from '../types';
 
 export interface RegistrationRequest {
@@ -160,13 +160,25 @@ export class RegistrationService {
         try {
           console.log(`🔔 [RegistrationService] Sending failure notification...`);
           
-          // Get current RUNE balance
+          // Get current RUNE balance and calculate registrations remaining
           let runeBalance: string | undefined;
+          let registrationsRemaining: number | undefined;
+          
           try {
             const balance = await this.walletService.getBalance();
             runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+            
+            if (balance) {
+              try {
+                const memolessTxCost = await this.getMemolessTxCostFromMemolessService();
+                registrationsRemaining = this.calculateRegistrationsRemaining(balance, memolessTxCost);
+              } catch (memolessError) {
+                console.error(`❌ [RegistrationService] Failed to get memoless TX cost: ${(memolessError as Error).message}`);
+                registrationsRemaining = 0; // Set to 0 when unable to calculate
+              }
+            }
           } catch (balanceError) {
-            console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(balanceError as Error).message}`);
+            console.log(`⚠️  [RegistrationService] Could not calculate registrations remaining: ${(balanceError as Error).message}`);
           }
 
           const failurePayload: FailureNotificationPayload = {
@@ -178,6 +190,7 @@ export class RegistrationService {
             network: this.config.network,
             hotWalletAddress: this.walletService.getAddress(),
             hotWalletRuneBalance: runeBalance,
+            registrationsRemaining,
             timestamp: new Date().toISOString()
           };
 
@@ -205,13 +218,25 @@ export class RegistrationService {
         try {
           console.log(`🔔 [RegistrationService] Sending failure notification...`);
           
-          // Get current RUNE balance
+          // Get current RUNE balance and calculate registrations remaining
           let runeBalance: string | undefined;
+          let registrationsRemaining: number | undefined;
+          
           try {
             const balance = await this.walletService.getBalance();
             runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+            
+            if (balance) {
+              try {
+                const memolessTxCost = await this.getMemolessTxCostFromMemolessService();
+                registrationsRemaining = this.calculateRegistrationsRemaining(balance, memolessTxCost);
+              } catch (memolessError) {
+                console.error(`❌ [RegistrationService] Failed to get memoless TX cost: ${(memolessError as Error).message}`);
+                registrationsRemaining = 0; // Set to 0 when unable to calculate
+              }
+            }
           } catch (balanceError) {
-            console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(balanceError as Error).message}`);
+            console.log(`⚠️  [RegistrationService] Could not calculate registrations remaining: ${(balanceError as Error).message}`);
           }
 
           const failurePayload: FailureNotificationPayload = {
@@ -223,6 +248,7 @@ export class RegistrationService {
             network: this.config.network,
             hotWalletAddress: this.walletService.getAddress(),
             hotWalletRuneBalance: runeBalance,
+            registrationsRemaining,
             timestamp: new Date().toISOString()
           };
 
@@ -262,13 +288,27 @@ export class RegistrationService {
       try {
         console.log(`🔔 [RegistrationService] Step 10: Sending notifications...`);
         
-        // Get current RUNE balance
+        // Get current RUNE balance and calculate registrations remaining
         let runeBalance: string | undefined;
+        let registrationsRemaining: number | undefined;
+        
         try {
           const balance = await this.walletService.getBalance();
           runeBalance = balance ? parseFloat(balance).toFixed(2) : undefined;
+          
+          if (balance) {
+            // Get memoless transaction cost and calculate remaining registrations
+            try {
+              const memolessTxCost = await this.getMemolessTxCostFromMemolessService();
+              registrationsRemaining = this.calculateRegistrationsRemaining(balance, memolessTxCost);
+              console.log(`🧮 [RegistrationService] Calculated ${registrationsRemaining} registrations remaining`);
+            } catch (memolessError) {
+              console.error(`❌ [RegistrationService] Failed to get memoless TX cost: ${(memolessError as Error).message}`);
+              registrationsRemaining = 0; // Set to 0 when unable to calculate
+            }
+          }
         } catch (error) {
-          console.log(`⚠️  [RegistrationService] Could not fetch RUNE balance: ${(error as Error).message}`);
+          console.log(`⚠️  [RegistrationService] Could not calculate registrations remaining: ${(error as Error).message}`);
         }
 
         const notificationPayload: NotificationPayload = {
@@ -280,11 +320,41 @@ export class RegistrationService {
           network: this.config.network,
           hotWalletAddress: this.walletService.getAddress(),
           hotWalletRuneBalance: runeBalance,
+          registrationsRemaining,
           timestamp: new Date().toISOString()
         };
 
         await this.notificationService.sendRegistrationNotification(notificationPayload);
         console.log(`✅ [RegistrationService] Notifications sent`);
+
+        // Check for low balance alert
+        if (registrationsRemaining !== undefined && this.notificationService.shouldSendLowBalanceAlert(registrationsRemaining)) {
+          try {
+            console.log(`🚨 [RegistrationService] Triggering low balance alert - ${registrationsRemaining} registrations remaining`);
+            
+            const memolessTxCost = await this.getMemolessTxCostFromMemolessService();
+            const networkTxFee = 0.02;
+            const totalRegistrationCost = memolessTxCost + networkTxFee;
+            
+            const lowBalancePayload: LowBalanceAlertPayload = {
+              network: this.config.network,
+              hotWalletAddress: this.walletService.getAddress(),
+              runeBalance: runeBalance || '0',
+              registrationsRemaining,
+              memolessTxCost,
+              networkTxFee,
+              totalRegistrationCost,
+              threshold: parseInt(process.env.LOW_BALANCE_ALERT_THRESHOLD || '25'),
+              timestamp: new Date().toISOString()
+            };
+
+            await this.notificationService.sendLowBalanceAlert(lowBalancePayload);
+            console.log(`🚨 [RegistrationService] Low balance alert sent`);
+          } catch (alertError) {
+            console.error(`❌ [RegistrationService] Failed to send low balance alert: ${(alertError as Error).message}`);
+            // Don't fail the registration if low balance alert fails
+          }
+        }
       } catch (error) {
         console.error(`❌ [RegistrationService] Failed to send notifications: ${(error as Error).message}`);
         // Don't fail the registration if notification fails
@@ -1079,5 +1149,42 @@ export class RegistrationService {
     }
     
     return `${integerPart}.${digits.join('')}`;
+  }
+
+  /**
+   * Get memoless transaction cost from the MemolessService's ThorchainApiService
+   * Throws error if unable to fetch the cost
+   */
+  private async getMemolessTxCostFromMemolessService(): Promise<number> {
+    // Access the thorchainApi through memolessService
+    const thorchainApi = (this.memolessService as any).thorchainApi;
+    if (thorchainApi && typeof thorchainApi.getMemolessTxCost === 'function') {
+      return await thorchainApi.getMemolessTxCost();
+    } else {
+      throw new Error('Could not access getMemolessTxCost method from ThorchainApiService');
+    }
+  }
+
+  /**
+   * Calculate registrations remaining based on RUNE balance and costs
+   */
+  private calculateRegistrationsRemaining(runeBalance: string, memolessTxCost: number, networkTxFee: number = 0.02): number {
+    try {
+      const balance = parseFloat(runeBalance);
+      const totalCostPerRegistration = memolessTxCost + networkTxFee;
+      const remaining = Math.floor(balance / totalCostPerRegistration);
+      
+      console.log(`🧮 [RegistrationService] Registrations calculation:`);
+      console.log(`   💰 Balance: ${balance} RUNE`);
+      console.log(`   🏷️  Memoless cost: ${memolessTxCost} RUNE`);
+      console.log(`   ⛽ Network fee: ${networkTxFee} RUNE`);
+      console.log(`   📊 Total per registration: ${totalCostPerRegistration} RUNE`);
+      console.log(`   🔢 Registrations remaining: ${remaining}`);
+      
+      return Math.max(0, remaining);
+    } catch (error) {
+      console.error('Error calculating registrations remaining:', error);
+      return 0;
+    }
   }
 }

@@ -188,6 +188,48 @@ export class ThorchainApiService {
     }
   }
 
+  async getMemolessTxCost(): Promise<number> {
+    console.log(`💰 [ThorchainApiService] Fetching memoless transaction cost from mimir...`);
+    
+    try {
+      const response = await this.api.get('/thorchain/mimir/key/MEMOLESSTXNCOST');
+      console.log(`📡 [ThorchainApiService] Memoless TX cost response status: ${response.status}`);
+      
+      const costInRune1e8 = parseInt(response.data);
+      if (isNaN(costInRune1e8)) {
+        throw new Error('Invalid memoless transaction cost value received from mimir');
+      }
+      
+      const costInRune = costInRune1e8 / 1e8;
+      
+      console.log(`💰 [ThorchainApiService] Memoless TX cost: ${costInRune1e8} raw (${costInRune} RUNE)`);
+      return costInRune;
+    } catch (error) {
+      console.error(`❌ [ThorchainApiService] Failed to fetch memoless TX cost:`, error);
+      throw new Error(`Failed to fetch memoless transaction cost: ${(error as Error).message}`);
+    }
+  }
+
+  calculateRegistrationsRemaining(runeBalance: string, memolessTxCost: number, networkTxFee: number = 0.02): number {
+    try {
+      const balance = parseFloat(runeBalance);
+      const totalCostPerRegistration = memolessTxCost + networkTxFee;
+      const remaining = Math.floor(balance / totalCostPerRegistration);
+      
+      console.log(`🧮 [ThorchainApiService] Registrations calculation:`);
+      console.log(`   💰 Balance: ${balance} RUNE`);
+      console.log(`   🏷️  Memoless cost: ${memolessTxCost} RUNE`);
+      console.log(`   ⛽ Network fee: ${networkTxFee} RUNE`);
+      console.log(`   📊 Total per registration: ${totalCostPerRegistration} RUNE`);
+      console.log(`   🔢 Registrations remaining: ${remaining}`);
+      
+      return Math.max(0, remaining);
+    } catch (error) {
+      console.error('Error calculating registrations remaining:', error);
+      return 0;
+    }
+  }
+
   async getNodeInfo(): Promise<any> {
     try {
       let response;
