@@ -438,7 +438,7 @@ export class MemolessService {
       'BASE': 'ethereum',
       'GAIA': 'cosmos',
       'DOGE': 'dogecoin',
-      'AVAX': 'avalanche',
+      'AVAX': 'ethereum', // AVAX is EVM-compatible, use ethereum format
       'XRP': 'xrp'
     };
 
@@ -446,14 +446,27 @@ export class MemolessService {
     let qrString: string;
 
     if (qrFormat) {
+      // Get the formatted amount based on chain requirements
+      const formattedAmount = this.getFormattedAmountForQR(chain, amount);
+      
       if (chain === 'BASE') {
-        qrString = `${qrFormat}:${address}@8453?value=${amount}`;
+        qrString = `${qrFormat}:${address}@8453?value=${formattedAmount}`;
       } else if (chain === 'BSC') {
-        qrString = `${qrFormat}:${address}@56?value=${amount}`;
+        qrString = `${qrFormat}:${address}@56?value=${formattedAmount}`;
+      } else if (chain === 'AVAX') {
+        qrString = `${qrFormat}:${address}@43114?value=${formattedAmount}`;
       } else if (qrFormat === 'ethereum') {
-        qrString = `${qrFormat}:${address}?value=${amount}`;
+        // ETH - use value parameter with wei
+        qrString = `${qrFormat}:${address}?value=${formattedAmount}`;
+      } else if (chain === 'XRP') {
+        // XRP uses 'amt' parameter according to XLS-2d
+        qrString = `${qrFormat}:${address}?amt=${formattedAmount}`;
+      } else if (chain === 'GAIA') {
+        // Cosmos - convert to uatom (1 ATOM = 1,000,000 uatom)
+        qrString = `${qrFormat}:${address}?amount=${formattedAmount}`;
       } else {
-        qrString = `${qrFormat}:${address}?amount=${amount}`;
+        // Bitcoin-like chains (BTC, LTC, BCH, DOGE) - use amount in human-readable format
+        qrString = `${qrFormat}:${address}?amount=${formattedAmount}`;
       }
     } else {
       // Fallback for unknown chains - just encode the amount
@@ -501,6 +514,34 @@ export class MemolessService {
     } catch (error) {
       console.error('Error converting to raw amount:', error);
       return '0';
+    }
+  }
+
+  // Format amount for QR code based on chain specifications
+  private getFormattedAmountForQR(chain: string, amount: string): string {
+    try {
+      // EVM chains need wei conversion (ETH, BSC, BASE, AVAX)
+      if (['ETH', 'BSC', 'BASE', 'AVAX'].includes(chain)) {
+        // Convert to wei using 18 decimals for EVM chains
+        const asset = `${chain}.${chain === 'ETH' ? 'ETH' : chain === 'BSC' ? 'BNB' : chain === 'BASE' ? 'ETH' : 'AVAX'}`;
+        const weiAmount = TransactionService.convertToBaseUnits(amount, asset);
+        return weiAmount;
+      }
+      
+      // Cosmos chains need conversion to micro units
+      if (chain === 'GAIA') {
+        // Convert ATOM to uatom (1 ATOM = 1,000,000 uatom)
+        const asset = 'GAIA.ATOM';
+        const uatomAmount = TransactionService.convertToBaseUnits(amount, asset);
+        return uatomAmount;
+      }
+      
+      // Bitcoin-like chains (BTC, LTC, BCH, DOGE) and XRP use human-readable amounts
+      return amount;
+      
+    } catch (error) {
+      console.error(`Error formatting amount for ${chain} QR code:`, error);
+      return amount; // Fallback to original amount
     }
   }
 
