@@ -469,9 +469,9 @@ export class MemolessService {
         qrString = `${qrFormat}:${address}?amount=${formattedAmount}`;
       }
     } else {
-      // Fallback for unknown chains - just encode the amount
-      qrString = amount;
-      console.warn(`Unknown chain ${chain} for QR code generation`);
+      // Fallback for unknown chains - just use the address
+      console.log(`${chain} chain not found in QR code config. Generating QR code using only inbound address`);
+      qrString = address;
     }
 
     // Generate the actual QR code image
