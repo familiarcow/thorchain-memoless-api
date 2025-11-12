@@ -10,7 +10,7 @@ import { NetworkConfig, QRCodeData } from '../types';
 export interface RegistrationRequest {
   asset: string;
   memo: string;
-  requested_in_asset_amount?: string;
+  requested_in_asset_amount?: string | number;
 }
 
 export interface RegistrationResponse {
@@ -366,8 +366,13 @@ export class RegistrationService {
     if (request.requested_in_asset_amount) {
       console.log(`🧮 [RegistrationService] Step 11: Calculating suggested amount...`);
       try {
+        // Convert to string to handle both string and number inputs
+        const requestedAmountStr = typeof request.requested_in_asset_amount === 'number' 
+          ? request.requested_in_asset_amount.toString() 
+          : request.requested_in_asset_amount;
+        
         suggestedAmount = this.calculateSuggestedAmount(
-          request.requested_in_asset_amount,
+          requestedAmountStr,
           minimumAmountToSend,
           memoReference.reference,
           assetDecimals
