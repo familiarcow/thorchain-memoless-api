@@ -149,9 +149,17 @@ export function createMsgDeposit(params: {
     let decimals = 8;
     
     if (coin.denom === 'rune') {
+      // THOR.RUNE - explicit handling
       chain = 'THOR';
       symbol = 'RUNE';
       ticker = 'RUNE';
+      decimals = 8;
+    } else if (!coin.denom.includes('/') && !coin.denom.includes('-')) {
+      // THOR native assets - denom is a single word (tcy, ruji, etc.)
+      // These are THORChain native assets without slashes or hyphens
+      chain = 'THOR';
+      symbol = coin.denom.toUpperCase();  // tcy -> TCY, ruji -> RUJI
+      ticker = symbol;
       decimals = 8;
     } else {
       const parts = coin.denom.split('-');

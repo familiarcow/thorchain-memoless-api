@@ -68,6 +68,7 @@ export interface PreflightResult extends ValidationResult {
     chain: string;
     dust_threshold: number;
     qr_code: QRCodeData;
+    is_native_thorchain?: boolean;
   };
 }
 
@@ -544,14 +545,16 @@ export class RegistrationService {
         const qrData = await this.memolessService.generateQRCodeData(
           chain,
           depositInfo.address,
-          result.processedAmount
+          result.processedAmount,
+          validatedAsset  // Pass full asset for proper denom handling
         );
-        
+
         result.deposit = {
           inbound_address: depositInfo.address,
           chain: chain,
           dust_threshold: depositInfo.dustThreshold,
-          qr_code: qrData
+          qr_code: qrData,
+          ...(depositInfo.isNativeThorchain && { is_native_thorchain: true })
         };
         
         console.log(`✅ [RegistrationService] Added deposit info - Address: ${depositInfo.address}, Chain: ${chain}`);

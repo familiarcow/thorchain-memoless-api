@@ -238,7 +238,8 @@ export class RegistrationController {
             qr_code_data_url: validation.deposit?.qr_code?.qrCodeDataURL,
             time_remaining: validation.validationDetails.timeRemaining,
             blocks_remaining: validation.validationDetails.blocksRemaining,
-            seconds_remaining: validation.validationDetails.blocksRemaining * 6
+            seconds_remaining: validation.validationDetails.blocksRemaining * 6,
+            ...(validation.deposit?.is_native_thorchain && { is_native_thorchain: true })
           }
         });
       } else {

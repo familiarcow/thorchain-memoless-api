@@ -62,15 +62,38 @@ export class MemolessService {
       
       const nonTokenPools = availablePools.filter(pool => !this.isToken(pool.asset));
       console.log(`🪙 [MemolessService] ${nonTokenPools.length} non-token assets (excluding synthetic tokens)`);
-      
-      const nonThorPools = nonTokenPools.filter(pool => !pool.asset.startsWith('THOR.')); // Remove all THOR chain assets
-      console.log(`🚫 [MemolessService] ${nonThorPools.length} assets after excluding THOR chain assets`);
-      
-      const validAssets = nonThorPools.map(pool => this.convertPoolToMemolessAsset(pool));
+
+      // THOR native assets (TCY, RUJI, etc.) come from pools - no longer filtering them out
+      const validAssets = nonTokenPools.map(pool => this.convertPoolToMemolessAsset(pool));
       console.log(`🔧 [MemolessService] Converted ${validAssets.length} pools to memoless assets`);
 
-      // Sort by descending balance_rune
-      validAssets.sort((a, b) => b.balanceRune - a.balanceRune);
+      // Add THOR.RUNE programmatically since it's not in pools (it's the base pair asset)
+      console.log(`💎 [MemolessService] Adding THOR.RUNE programmatically...`);
+      try {
+        const networkData = await this.thorchainApi.getNetwork();
+        const runePriceUSD = parseFloat(networkData.rune_price_in_tor) / 1e8;
+        console.log(`💰 [MemolessService] RUNE price from network: $${runePriceUSD.toFixed(4)}`);
+
+        const runeAsset: MemolessAsset = {
+          asset: 'THOR.RUNE',
+          status: 'Available',
+          decimals: 8,
+          priceUSD: runePriceUSD,
+          balanceRune: 0, // RUNE is the base pair, doesn't have a "balance" in pools
+          isToken: false
+        };
+        validAssets.push(runeAsset);
+        console.log(`✅ [MemolessService] Added THOR.RUNE to valid assets`);
+      } catch (error) {
+        console.warn(`⚠️ [MemolessService] Could not add THOR.RUNE: ${(error as Error).message}`);
+      }
+
+      // Sort by descending balance_rune, but keep THOR.RUNE at the top
+      validAssets.sort((a, b) => {
+        if (a.asset === 'THOR.RUNE') return -1;
+        if (b.asset === 'THOR.RUNE') return 1;
+        return b.balanceRune - a.balanceRune;
+      });
       console.log(`📈 [MemolessService] Sorted assets by RUNE balance (descending)`);
       
       if (validAssets.length > 0) {
@@ -245,13 +268,22 @@ export class MemolessService {
 
   // Get inbound address for specific asset (Step 6 from memoless.md)
   getInboundAddressForAsset(
-    inboundAddresses: InboundAddress[], 
+    inboundAddresses: InboundAddress[],
     asset: string
-  ): { address: string; dustThreshold: number } {
+  ): { address: string; dustThreshold: number; isNativeThorchain?: boolean } {
     const chain = asset.split('.')[0]; // Extract chain from asset
-    
+
+    // THOR native assets - deposit goes to THORChain module address
+    if (chain === 'THOR') {
+      return {
+        address: this.config.thorchainModuleAddress,
+        dustThreshold: 0, // No dust threshold for native deposits
+        isNativeThorchain: true
+      };
+    }
+
     const inboundAddress = inboundAddresses.find(addr => addr.chain === chain);
-    
+
     if (!inboundAddress) {
       throw new Error(`No inbound address found for chain: ${chain}`);
     }
@@ -427,7 +459,7 @@ export class MemolessService {
   }
 
   // Generate QR code data (Step 8 from memoless.md)
-  async generateQRCodeData(chain: string, address: string, amount: string): Promise<QRCodeData> {
+  async generateQRCodeData(chain: string, address: string, amount: string, asset?: string): Promise<QRCodeData> {
     const chainFormatMap: { [key: string]: string } = {
       'BTC': 'bitcoin',
       'ETH': 'ethereum',
@@ -439,7 +471,8 @@ export class MemolessService {
       'GAIA': 'cosmos',
       'DOGE': 'dogecoin',
       'AVAX': 'ethereum', // AVAX is EVM-compatible, use ethereum format
-      'XRP': 'xrp'
+      'XRP': 'xrp',
+      'THOR': 'thorchain'  // THORChain native assets
     };
 
     const qrFormat = chainFormatMap[chain];
@@ -464,6 +497,12 @@ export class MemolessService {
       } else if (chain === 'GAIA') {
         // Cosmos - convert to uatom (1 ATOM = 1,000,000 uatom)
         qrString = `${qrFormat}:${address}?amount=${formattedAmount}`;
+      } else if (chain === 'THOR') {
+        // THORChain native assets - use Cosmos format with denom
+        // Use provided asset or default to THOR.RUNE
+        const fullAsset = asset || 'THOR.RUNE';
+        const denom = TransactionService.getAssetDenom(fullAsset);
+        qrString = `${qrFormat}:${address}?amount=${formattedAmount}&denom=${denom}`;
       } else {
         // Bitcoin-like chains (BTC, LTC, BCH, DOGE) - use amount in human-readable format
         qrString = `${qrFormat}:${address}?amount=${formattedAmount}`;
@@ -534,6 +573,13 @@ export class MemolessService {
         const asset = 'GAIA.ATOM';
         const uatomAmount = TransactionService.convertToBaseUnits(amount, asset);
         return uatomAmount;
+      }
+
+      // THORChain native assets - convert to base units (1e8)
+      if (chain === 'THOR') {
+        const asset = 'THOR.RUNE'; // All THOR assets use 8 decimals
+        const baseAmount = TransactionService.convertToBaseUnits(amount, asset);
+        return baseAmount;
       }
       
       // Bitcoin-like chains (BTC, LTC, BCH, DOGE) and XRP use human-readable amounts

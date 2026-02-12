@@ -9,13 +9,14 @@ describe('THORChain Memoless API Integration Tests', () => {
   // Test configuration
   const TEST_ASSETS = {
     BTC: 'BTC.BTC',
-    ATOM: 'GAIA.ATOM'
+    ATOM: 'GAIA.ATOM',
+    RUNE: 'THOR.RUNE'
   };
 
   const TEST_MEMOS = {
     VALID_DONATE: 'DONATE:BTC.BTC',
     VALID_ATOM_DONATE: 'DONATE:GAIA.ATOM',
-    INVALID: 'test-wrong-memo'
+    VALID_RUNE_DONATE: 'DONATE:THOR.RUNE'
   };
 
   beforeAll(async () => {
@@ -37,25 +38,10 @@ describe('THORChain Memoless API Integration Tests', () => {
     }
   }, 10000);
 
-  describe('1. Invalid Memo Registration', () => {
-    test('should fail to register memo with wrong memo format', async () => {
-      const response = await request(server)
-        .post('/api/v1/register')
-        .send({
-          asset: TEST_ASSETS.BTC,
-          memo: TEST_MEMOS.INVALID
-        })
-        .expect(500); // Registration fails at THORChain level, returns 500
+  // Note: Invalid memo test removed - it wasted gas on stagenet for known-failing transactions.
+  // Memo validation should be tested at the service level before transaction submission.
 
-      expect(response.body.success).toBe(false);
-      expect(response.body.error).toBeDefined();
-      expect(response.body.error.code).toBe('REGISTRATION_FAILED');
-      expect(response.body.error.message).toContain('Failed to register memo');
-      expect(response.body.error.details).toBeDefined();
-    });
-  });
-
-  describe('2. BTC.BTC Registration and Tests', () => {
+  describe('1. BTC.BTC Registration and Tests', () => {
     let btcRegistration: any;
     let minimumAmount: string;
 
@@ -149,7 +135,7 @@ describe('THORChain Memoless API Integration Tests', () => {
     });
   });
 
-  describe('3. GAIA.ATOM Registration and Tests (Different Decimals)', () => {
+  describe('2. GAIA.ATOM Registration and Tests (Different Decimals)', () => {
     let atomRegistration: any;
     let minimumAmount: string;
 
@@ -218,6 +204,68 @@ describe('THORChain Memoless API Integration Tests', () => {
         .send({
           asset: atomRegistration.asset,
           reference: atomRegistration.reference,
+          amount: '1.00000000' // Wrong amount
+        })
+        .expect(400);
+
+      expect(response.body.success).toBe(false);
+      expect(response.body.error).toBeDefined();
+      expect(response.body.error.message).toContain('validation failed');
+    });
+  });
+
+  describe('3. THOR.RUNE Registration and Tests (Native THORChain Asset)', () => {
+    let runeRegistration: any;
+    let minimumAmount: string;
+
+    test('should successfully register THOR.RUNE memo', async () => {
+      const response = await request(server)
+        .post('/api/v1/register')
+        .send({
+          asset: TEST_ASSETS.RUNE,
+          memo: TEST_MEMOS.VALID_RUNE_DONATE
+        })
+        .expect(201);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.internal_api_id).toBeDefined();
+      expect(response.body.asset).toBe(TEST_ASSETS.RUNE);
+      expect(response.body.memo).toBe(TEST_MEMOS.VALID_RUNE_DONATE);
+      expect(response.body.reference).toBeDefined();
+      expect(response.body.minimum_amount_to_send).toBeDefined();
+      expect(response.body.decimals).toBe(8); // THOR assets use 8 decimals
+
+      runeRegistration = response.body;
+      minimumAmount = response.body.minimum_amount_to_send;
+
+      // Store for comparison
+      registrationData.rune = runeRegistration;
+    });
+
+    test('should pass preflight check for THOR.RUNE using asset & reference ID', async () => {
+      const response = await request(server)
+        .post('/api/v1/preflight')
+        .send({
+          asset: runeRegistration.asset,
+          reference: runeRegistration.reference,
+          amount: minimumAmount
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toContain('proceed');
+      expect(response.body.data.inbound_address).toBeDefined();
+      expect(response.body.data.qr_code).toBeDefined();
+      // THOR native assets should use THORChain module address
+      expect(response.body.data.is_native_thorchain).toBe(true);
+    });
+
+    test('should fail preflight check using wrong amount for THOR.RUNE', async () => {
+      const response = await request(server)
+        .post('/api/v1/preflight')
+        .send({
+          asset: runeRegistration.asset,
+          reference: runeRegistration.reference,
           amount: '1.00000000' // Wrong amount
         })
         .expect(400);
@@ -305,6 +353,7 @@ describe('THORChain Memoless API Integration Tests', () => {
       const assetNames = response.body.assets.map((a: any) => a.asset);
       expect(assetNames).toContain(TEST_ASSETS.BTC);
       expect(assetNames).toContain(TEST_ASSETS.ATOM);
+      expect(assetNames).toContain(TEST_ASSETS.RUNE); // THOR.RUNE added programmatically
     });
   });
 

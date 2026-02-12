@@ -188,6 +188,19 @@ export class ThorchainApiService {
     }
   }
 
+  async getNetwork(): Promise<{ rune_price_in_tor: string; native_tx_fee_rune: string; [key: string]: any }> {
+    console.log(`📡 [ThorchainApiService] Fetching network info...`);
+
+    try {
+      const response = await this.api.get('/thorchain/network');
+      console.log(`📡 [ThorchainApiService] Network info response status: ${response.status}`);
+      return response.data;
+    } catch (error) {
+      console.error(`❌ [ThorchainApiService] Error fetching network info:`, error);
+      throw new Error('Failed to fetch THORChain network info');
+    }
+  }
+
   async getMemolessTxCost(): Promise<number> {
     console.log(`💰 [ThorchainApiService] Fetching memoless transaction cost from mimir...`);
     

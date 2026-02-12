@@ -19,16 +19,18 @@ export class TransactionService {
 
   static getAssetDenom(asset: string): string {
     // Convert asset format to denom
-    if (asset === 'THOR.RUNE') {
-      return 'rune';
-    }
-    
-    // For other assets, convert format like 'BTC.BTC' to 'btc/btc'
     const [chain, assetName] = asset.split('.');
     if (!chain || !assetName) {
       throw new Error(`Invalid asset format: ${asset}`);
     }
-    
+
+    // THOR native assets - denom is just the lowercase symbol
+    // THOR.RUNE -> rune, THOR.TCY -> tcy, THOR.RUJI -> ruji, etc.
+    if (chain === 'THOR') {
+      return assetName.toLowerCase();
+    }
+
+    // For other assets, convert format like 'BTC.BTC' to 'btc/btc'
     return `${chain.toLowerCase()}/${assetName.toLowerCase()}`;
   }
 
@@ -64,7 +66,8 @@ export class TransactionService {
       'BSC': 18,
       'GAIA': 6,
       'BASE': 18,
-      'XRP': 6
+      'XRP': 6,
+      'THOR': 8  // THORChain native assets (RUNE, TCY, RUJI, etc.)
     };
     
     return decimalMap[chain] || 8;
